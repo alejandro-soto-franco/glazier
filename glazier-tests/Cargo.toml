@@ -1,0 +1,19 @@
+[package]
+name = "glazier-tests"
+description = "Integration tests for the glazier engines"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+cuda = ["glazier/cuda", "dep:glazier-cuda"]
+
+[dependencies]
+glazier = { path = "../glazier", version = "0.1.0" }
+glazier-core.workspace = true
+glazier-cuda = { workspace = true, optional = true }

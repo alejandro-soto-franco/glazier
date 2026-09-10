@@ -1,0 +1,17 @@
+[package]
+name = "glazier-cuda"
+description = "Checkerboard cellular Potts sweep on the GPU"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+
+[dependencies]
+glazier-core.workspace = true
+cudarc.workspace = true

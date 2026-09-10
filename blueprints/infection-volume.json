@@ -1,0 +1,42 @@
+{
+  "name": "an infected slab with motile immune cells",
+  "width": 64,
+  "height": 64,
+  "depth": 32,
+  "types": [
+    {
+      "name": "Epithelial",
+      "target_volume": 512.0,
+      "lambda_volume": 2.0,
+      "target_surface": 320.0,
+      "lambda_surface": 0.05,
+      "connected": true,
+      "secretion": { "virus": 0.02 },
+      "death_rate": 0.001
+    },
+    {
+      "name": "Immune",
+      "target_volume": 512.0,
+      "lambda_volume": 2.0,
+      "max_activity": 100.0,
+      "lambda_activity": 100.0,
+      "uptake": { "virus": 0.05 },
+      "chemotaxis": { "virus": 150.0 }
+    }
+  ],
+  "fields": [
+    { "name": "virus", "diffusion": 0.5, "decay": 0.01, "initial": 0.0 }
+  ],
+  "contact": [
+    0.0, 16.0, 16.0,
+    16.0, 8.0, 12.0,
+    16.0, 12.0, 10.0
+  ],
+  "temperature": 10.0,
+  "neighbour_order": 2,
+  "seed": 3,
+  "steps": 60,
+  "dump_every": 0,
+  "initial": { "side": 8, "nx": 8, "ny": 8, "nz": 4, "fractions": { "Immune": 0.08 } },
+  "units": { "micron_per_site": 1.0, "minute_per_step": 1.0 }
+}

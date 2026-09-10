@@ -1,0 +1,70 @@
+{
+  "name": "epithelial sheet under infection",
+  "width": 128,
+  "height": 128,
+  "types": [
+    {
+      "name": "Epithelial",
+      "target_volume": 64.0,
+      "lambda_volume": 2.0,
+      "target_surface": 34.0,
+      "lambda_surface": 0.1,
+      "uptake": {
+        "virus": 0.02
+      },
+      "death_rate": 0.0005
+    },
+    {
+      "name": "Infected",
+      "target_volume": 64.0,
+      "lambda_volume": 2.0,
+      "secretion": {
+        "virus": 0.4,
+        "interferon": 0.1
+      },
+      "death_rate": 0.004
+    }
+  ],
+  "fields": [
+    {
+      "name": "virus",
+      "diffusion": 0.8,
+      "decay": 0.01,
+      "initial": 0.0
+    },
+    {
+      "name": "interferon",
+      "diffusion": 1.6,
+      "decay": 0.02,
+      "initial": 0.0
+    }
+  ],
+  "contact": [
+    0.0,
+    16.0,
+    16.0,
+    16.0,
+    8.0,
+    8.0,
+    16.0,
+    8.0,
+    8.0
+  ],
+  "temperature": 10.0,
+  "neighbour_order": 2,
+  "seed": 1,
+  "steps": 200,
+  "dump_every": 100,
+  "initial": {
+    "side": 8,
+    "nx": 16,
+    "ny": 16,
+    "fractions": {
+      "Infected": 0.02
+    }
+  },
+  "units": {
+    "micron_per_site": 1.0,
+    "minute_per_step": 1.0
+  }
+}

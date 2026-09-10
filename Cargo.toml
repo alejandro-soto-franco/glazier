@@ -1,0 +1,32 @@
+[workspace]
+members = ["glazier", "glazier-core", "glazier-cuda", "glazier-py", "glazier-tests"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+keywords = ["cellular-potts", "tissue", "simulation", "cuda", "biophysics"]
+categories = ["science", "simulation"]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/alejandro-soto-franco/glazier"
+authors = ["Alejandro Soto Franco"]
+rust-version = "1.85"
+
+[workspace.dependencies]
+glazier-core = { path = "glazier-core", version = "0.1.0" }
+glazier-cuda = { path = "glazier-cuda", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `dynamic-loading` dlopens libcuda and libnvrtc at run time, so the crate
+# builds with no CUDA headers and no linking: a machine without a GPU still
+# compiles it, and docs.rs can document it.
+cudarc = { version = "0.19", default-features = false, features = [
+    "cuda-12060",
+    "driver",
+    "nvrtc",
+    "dynamic-loading",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"

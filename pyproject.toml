@@ -1,0 +1,33 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "glazier"
+dynamic = ["version"]
+description = "Cellular Potts tissue simulation on the CPU and the GPU"
+readme = "README.md"
+license = { text = "MIT OR Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "Alejandro Soto Franco" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Intended Audience :: Science/Research",
+]
+dependencies = [
+    "numpy>=2.0",
+    "polars>=1.0",
+    "scipy>=1.13",
+    "tifffile>=2024.1.30",
+]
+
+[tool.maturin]
+manifest-path = "glazier-py/Cargo.toml"
+python-source = "python"
+module-name = "glazier._native"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

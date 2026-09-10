@@ -1,0 +1,26 @@
+[package]
+name = "glazier"
+description = "Cellular Potts tissue simulation on the CPU and the GPU"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+
+[features]
+default = []
+cuda = ["dep:glazier-cuda"]
+
+[dependencies]
+glazier-core.workspace = true
+glazier-cuda = { workspace = true, optional = true }
+serde_json.workspace = true
+
+[[bin]]
+name = "glazier"
+path = "src/main.rs"

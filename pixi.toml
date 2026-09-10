@@ -1,0 +1,28 @@
+[workspace]
+authors = ["Alejandro Soto Franco <soto.alejandro2025@gmail.com>"]
+channels = ["conda-forge", "compucell3d"]
+name = "glazier"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[activation.env]
+PYTHONPATH = "python"
+
+[tasks]
+sim = "python sims/nematic_tissue.py"
+roundtrip = "python bench/roundtrip.py"
+engines = "python bench/engines.py"
+figures = "python bench/figures.py"
+test = "python -m pytest tests -q"
+
+[dependencies]
+python = "3.12.*"
+cc3d = ">=4.10.0,<5"
+tifffile = ">=2026.9.9,<2027"
+scipy = ">=1.18.0,<2"
+polars = ">=1.44.2,<2"
+
+[pypi-dependencies]
+pcdl = ">=4.1.9, <5"
+pytest = ">=9.1.1, <10"
+maturin = ">=1.15.0, <2"
