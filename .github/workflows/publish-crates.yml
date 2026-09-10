@@ -51,7 +51,7 @@ jobs:
             cat <<'ORDER'
           glazier-core
           glazier-cuda
-          glazier
+          glazier-cpm
           ORDER
             echo EOF
           } >> "$GITHUB_OUTPUT"

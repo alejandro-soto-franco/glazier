@@ -19,6 +19,6 @@ default = []
 cuda = ["glazier/cuda"]
 
 [dependencies]
-glazier = { path = "../glazier", version = "0.1.0" }
+glazier = { path = "../glazier", version = "0.1.0", package = "glazier-cpm" }
 glazier-core.workspace = true
 pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }

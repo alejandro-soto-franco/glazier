@@ -2,9 +2,9 @@
 
 Cellular Potts tissue simulation on the CPU and the GPU.
 
-[![crates.io](https://img.shields.io/crates/v/glazier.svg)](https://crates.io/crates/glazier)
+[![crates.io](https://img.shields.io/crates/v/glazier-cpm.svg)](https://crates.io/crates/glazier-cpm)
 [![PyPI](https://img.shields.io/pypi/v/glazier.svg)](https://pypi.org/project/glazier/)
-[![docs.rs](https://docs.rs/glazier/badge.svg)](https://docs.rs/glazier)
+[![docs.rs](https://docs.rs/glazier-cpm/badge.svg)](https://docs.rs/glazier-cpm)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#licence)
 
 A sheet or a block of cells on a periodic lattice, under contact, volume,
@@ -21,8 +21,8 @@ lattice a model of tissue.
 ## Install
 
 ```bash
-cargo add glazier                       # the library
-cargo install glazier --features cuda   # the binary, with the device sweep
+cargo add glazier-cpm                   # the library, as `use glazier::...`
+cargo install glazier-cpm --features cuda   # the binary, with the device sweep
 pip install glazier                    # the Python side and the bindings
 ```
 

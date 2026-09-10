@@ -1,5 +1,5 @@
 [package]
-name = "glazier"
+name = "glazier-cpm"
 description = "Cellular Potts tissue simulation on the CPU and the GPU"
 version.workspace = true
 edition.workspace = true
@@ -20,6 +20,13 @@ cuda = ["dep:glazier-cuda"]
 glazier-core.workspace = true
 glazier-cuda = { workspace = true, optional = true }
 serde_json.workspace = true
+
+# The crates.io name `glazier` belongs to an unrelated crate, so the package
+# takes the suffix and the library and the binary keep the plain name: a
+# dependant still writes `use glazier::...` and still runs `glazier`.
+[lib]
+name = "glazier"
+path = "src/lib.rs"
 
 [[bin]]
 name = "glazier"

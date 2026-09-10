@@ -18,19 +18,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "glazier"
-version = "0.1.0"
-dependencies = [
- "glazier-core",
- "glazier-cuda",
- "serde_json",
-]
-
-[[package]]
 name = "glazier-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "glazier-cpm"
+version = "0.1.0"
+dependencies = [
+ "glazier-core",
+ "glazier-cuda",
  "serde_json",
 ]
 
@@ -46,8 +46,8 @@ dependencies = [
 name = "glazier-py"
 version = "0.1.0"
 dependencies = [
- "glazier",
  "glazier-core",
+ "glazier-cpm",
  "pyo3",
 ]
 
@@ -55,8 +55,8 @@ dependencies = [
 name = "glazier-tests"
 version = "0.1.0"
 dependencies = [
- "glazier",
  "glazier-core",
+ "glazier-cpm",
  "glazier-cuda",
 ]
 
