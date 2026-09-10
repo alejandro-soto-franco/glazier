@@ -40,7 +40,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: check the device sweep
-        run: cargo check -p glazier --features cuda
+        run: cargo check -p glazier-cpm --features cuda
 
       - name: test
         run: cargo test --workspace
@@ -67,7 +67,7 @@ jobs:
       # The binary backs one half of the conformance test, which compares what
       # the compiled module read against what the binary printed.
       - name: build the binary
-        run: cargo build --release -p glazier
+        run: cargo build --release -p glazier-cpm
 
       - name: pytest
         run: python -m pytest tests -q
