@@ -233,6 +233,30 @@ def speed_figure(steps: int = 100) -> None:
     save(fig, FIGURES / "speed")
 
 
+def circular_mean(values: np.ndarray, span: int) -> float:
+    """A centroid a cell keeps when it straddles the periodic edge.
+
+    A plain mean puts a cell sitting across the seam in the middle of the
+    lattice, where none of it is. The mean of `exp(2 pi i x / span)` is
+    single-valued whatever the wrap, and its angle is the centroid.
+    """
+    angle = np.angle(np.exp(2j * np.pi * values / span).mean())
+    return float((angle / (2 * np.pi) * span) % span)
+
+
+def unwrap(path: np.ndarray, span: int) -> np.ndarray:
+    """Follow a track across the seam instead of jumping back over it."""
+    out = path.copy()
+    for index in range(1, len(out)):
+        for axis in range(2):
+            step = out[index, axis] - out[index - 1, axis]
+            if step > span / 2:
+                out[index:, axis] -= span
+            elif step < -span / 2:
+                out[index:, axis] += span
+    return out
+
+
 def motility_figure() -> None:
     """Where a cell goes when it remembers where it has been."""
     from glazier import _native
@@ -256,8 +280,8 @@ def motility_figure() -> None:
             labels, width, height, depth = _native.run(json.dumps(model), step)
             field = np.asarray(labels, dtype=np.uint32).reshape(depth, height, width)[0]
             ys, xs = np.nonzero(field)
-            path.append((xs.mean(), ys.mean()))
-        return np.array(path)
+            path.append((circular_mean(xs, width), circular_mean(ys, height)))
+        return unwrap(np.array(path), model["width"])
 
     steps = list(range(0, 801, 40))
     still = track(0.0, 0.0, steps)
