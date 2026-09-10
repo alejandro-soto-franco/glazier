@@ -152,7 +152,7 @@ change took the serial engine from 4.05 s to 3.15 s at 1024 by 1024.
 
 ## One description on four engines
 
-`~/hogeweg/bench/engines.py` runs `blueprints/monolayer-physicell.json` on
+`bench/engines.py` runs `blueprints/monolayer-physicell.json` on
 CompuCell3D 4.10, on both glazier engines and on PhysiCell 1.14.2: 128 by 128,
 256 cells, 200 steps.
 
