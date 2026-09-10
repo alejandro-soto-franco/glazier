@@ -9,14 +9,14 @@ Cellular Potts tissue simulation on the CPU and the GPU.
 
 A sheet or a block of cells on a periodic lattice, under contact, volume,
 surface and length energies, with diffusing chemical fields, chemotaxis,
-persistent motility, division, death and a connectivity veto. One JSON
-description drives the engine here, CompuCell3D and PhysiCell, so a model
+persistent motility, division, death and a connectivity veto. The engine
+here, CompuCell3D and PhysiCell all read one JSON description, so a model
 written once runs on all three and the results are comparable.
 
-Named after James Glazier, whose work with Graner and Hogeweg made the Potts
-lattice a model of tissue.
+Named after James Glazier, whose work with Graner and Hogeweg applied the
+Potts lattice to tissue.
 
-![Tissue under six descriptions](figures/tissue.png)
+![Six descriptions on the serial engine](figures/tissue.png)
 
 ## Install
 
@@ -49,8 +49,7 @@ and measures what they produce is Python, and both read the same descriptions.
 | `tests/` | Python tests, including the one that compares the two readers |
 
 A Blueprint is parsed twice, once by serde and once by `glazier.blueprint`, and
-a field that drifts between the two readers is the failure the format exists to
-prevent. `tests/test_blueprint_conformance.py` compares them field by field
+a field that drifts between the two readers is a conformance failure. `tests/test_blueprint_conformance.py` compares them field by field
 over every description in the tree, through the compiled module and through the
 binary.
 
@@ -111,7 +110,7 @@ The two therefore agree in distribution rather than trajectory, which is what
 `tests/gpu_matches_cpu.rs` asserts: identical cell counts, identical mean
 volume, and a spread about target within a quarter of each other.
 
-## Measured
+## Timings
 
 100 Monte Carlo steps, cells of side 8, on an RTX 5060 Laptop GPU against one
 CPU thread.
@@ -134,7 +133,8 @@ The draws are counter-based: each one is a hash of site, step, colour and
 index, so no generator state is stored. A xoshiro256++ state per site
 instead moved 64 bytes per site per colour, more traffic than the lattice
 itself, and ran 1.7 times slower on a card that is bandwidth-bound.
-It also allocated 33 MB on a 1024 by 1024 lattice, which is now nothing.
+It also allocated 33 MB on a 1024 by 1024 lattice, which the counter-based
+draws do not.
 
 A short run through the CLI reads slower on the device than these figures,
 because the first call compiles the kernel with nvrtc and uploads the lattice.
@@ -150,7 +150,7 @@ offset from a coordinate already in range. A
 remainder is a division, and this sits in the innermost loop of the sweep: the
 change took the serial engine from 4.05 s to 3.15 s at 1024 by 1024.
 
-## One description on four engines
+## Engine comparison
 
 `bench/engines.py` runs `blueprints/monolayer-physicell.json` on
 CompuCell3D 4.10, on both glazier engines and on PhysiCell 1.14.2: 128 by 128,
@@ -167,7 +167,7 @@ CompuCell3D 4.10, on both glazier engines and on PhysiCell 1.14.2: 128 by 128,
 | Net charge | 0.000 | 0.000 | 0.000 | 0.000 |
 | Seconds | 0.372 | 0.128 | 0.103 | 1.390 |
 
-![One description on four engines](figures/engines.png)
+![Engine comparison](figures/engines.png)
 
 Cell count and net charge transfer across all four. Cell shape does not: a
 Potts cell is an irregular polygon at eccentricity 0.4 and a PhysiCell agent is
@@ -176,7 +176,7 @@ column describe the rasterisation rather than the tissue.
 
 ## Surface term across engines
 
-`harness/blueprints/monolayer-surface.json` adds `lambda_surface` 0.1 at a
+`blueprints/monolayer-surface.json` adds `lambda_surface` 0.1 at a
 target of 34 bonds, and the three lattice engines round their cells by the same
 amount.
 
@@ -188,7 +188,7 @@ amount.
 | Disclinations | 38 | 34 | 44 |
 
 The global nematic order over 256 cells fluctuates by roughly `1/sqrt(N)`, so
-that column is the one to read last. Eccentricity and defect count settle the
+that column varies most between runs. Eccentricity and defect count settle the
 comparison.
 
 ## Three dimensions
@@ -221,7 +221,7 @@ eighteen neighbours where one in a plane has eight, so the geometric mean the
 memory reads drops to zero far more readily: at `max_activity` 20, which moves
 a cell three times as far in a plane, a cell in a volume does not move at all,
 and it takes 100 before it does. Both are recorded in
-`glazier-tests/tests/volume_terms.rs`, which is where a reader would look.
+`glazier-tests/tests/volume_terms.rs`.
 
 ## Device coverage
 
@@ -263,7 +263,7 @@ test is local: it reads the neighbourhood of the site being taken and asks
 whether the sites there belonging to the losing cell fall into one piece.
 CompuCell3D walks the cell's whole site graph instead, which is serial by
 construction, so the two engines refuse different sets of copies and both keep
-cells whole, which is what a description means by asking.
+cells whole, which is what the description asks for.
 
 It is a sufficient condition: it stops every local pinch, and a cell can still
 separate through a sequence of moves that is nowhere locally disconnecting. On the device the neighbourhood is at most
@@ -279,14 +279,14 @@ The three lattice engines agree there on cell count, mean area, the spread
 about target and a net disclination charge of zero, and they part company on
 shape: mean eccentricity reads 0.512 under CompuCell3D's global rule against
 0.404 and 0.405 under the local one. Refusing a different set of copies makes a
-different tissue: the sharpest instance in this repository of a description
-stating an intent that two engines realise differently.
-`docs/exchange-surface.md` is where that belongs.
+different tissue. It is the clearest case here of a description stating an
+intent that two engines realise differently, and `docs/exchange-surface.md`
+records it.
 
 ## Polarity
 
-Two ways for a cell to go somewhere, both work along the move rather than terms
-in a total energy.
+Two ways for a cell to move. Both are priced along the move rather than as
+terms in a total energy.
 
 **Memory.** Every site remembers how recently it was taken, and a copy is
 priced against the difference in that memory between the two sites it runs
@@ -304,7 +304,7 @@ stays at its target volume.
 with one travels that way whatever its neighbours do, and it wants
 `"connected": true` to stay whole while being dragged.
 
-![A cell that remembers where it has been](figures/motility.png)
+![Displacement under the memory term](figures/motility.png)
 
 Both want their parameters set against the volume constraint. The memory bonus
 is bounded by `lambda_activity`, so a value far past `lambda_volume` inflates
@@ -312,7 +312,7 @@ the cell instead of moving it, and a cell driven hard enough can wrap medium
 into a ring that the connectivity veto then locks. `blueprints/immune-motile.json`
 states a regime that works.
 
-## Adhesion as molecules
+## Adhesion molecules
 
 A description can name adhesion molecules, say how much of each a type
 presents, and give a binding matrix over them, instead of writing out an energy
@@ -333,11 +333,11 @@ different amounts and the amounts change as the cell runs. That is state per
 cell rather than per type, and a description that states it is describing a
 trajectory instead of a model.
 
-## Not yet here
+## Not implemented
 
 - Focal point plasticity: explicit links between cell pairs, with their own
-  creation and breaking rules. It is a mutable list per cell, the one kind of
-  state that a declarative description and a parallel sweep both resist.
+  creation and breaking rules. It is a mutable list per cell, which neither a
+  declarative description nor a parallel sweep accommodates well.
 
 ## Harness
 
