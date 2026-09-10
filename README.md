@@ -280,8 +280,7 @@ about target and a net disclination charge of zero, and they part company on
 shape: mean eccentricity reads 0.512 under CompuCell3D's global rule against
 0.404 and 0.405 under the local one. Refusing a different set of copies makes a
 different tissue. It is the clearest case here of a description stating an
-intent that two engines realise differently, and `docs/exchange-surface.md`
-records it.
+intent that two engines realise differently.
 
 ## Polarity
 
@@ -355,8 +354,7 @@ their own interfaces, and measures whatever any engine produces on one lattice.
 
 `bench/roundtrip.py` sends a simulated tissue through mermin and scores what it
 recovers against a director the model knows exactly: 0.34 degrees median over
-121 cells. `docs/exchange-surface.md` states what each engine declares and what
-each leaves to code.
+121 cells.
 
 ## Figures
 
