@@ -187,10 +187,11 @@ steady ones.
 
 ## Three dimensions
 
-A description gives a `depth`, and one is a plane. The lattice, the
+A description sets `depth`. A depth of one is a plane. The lattice, the
 neighbourhoods, the field solver, the moments and both engines all take the
-third axis. A plane keeps the arithmetic it always had, since every offset with
-a nonzero `z` drops out of its neighbourhood and the third variance is zero.
+third axis. At depth one the arithmetic reduces to the two-dimensional case,
+since every offset with a nonzero `z` falls outside the neighbourhood and the
+third variance is zero.
 
 Neighbour orders on a cubic lattice are the six faces, the eighteen faces and
 edges, and all twenty-six. In a plane, orders two and three are both the eight
@@ -208,7 +209,7 @@ on the device. `blueprints/infection-volume.json` puts the whole stack in a
 slab: an epithelium shedding virus with a death rate, motile immune cells
 taking it up and following its gradient, 60 steps in 1.09 s against 0.081 s.
 
-Two terms want different parameters in a volume. A drift moves a 512-site
+Two terms take different parameters in a volume. A drift moves a 512-site
 cell's centroid by a five-hundredth of a site per accepted copy, where a
 64-site cell in a plane moves by a sixty-fourth. A site in a volume also has
 eighteen neighbours where one in a plane has eight, so the geometric mean the
@@ -297,12 +298,12 @@ more than three times as far as the same cell without it, on either engine, and
 stays at its target volume.
 
 **Drift.** A force per axis, whose work is the displacement along it. A cell
-with one travels that way whatever its neighbours do, and it wants
+with one travels that way whatever its neighbours do, and it needs
 `"connected": true` to stay whole while being dragged.
 
 ![Displacement under the memory term](figures/motility.png)
 
-Both want their parameters set against the volume constraint. The memory bonus
+Both take their parameters from the volume constraint. The memory bonus
 is bounded by `lambda_activity`, so a value far past `lambda_volume` inflates
 the cell instead of moving it, and a cell driven hard enough can wrap medium
 into a ring that the connectivity veto then locks.
@@ -350,7 +351,7 @@ their own interfaces, and measures whatever any engine produces on one lattice.
 | `compare.py` | angle residuals mod pi, and the axis-convention test |
 
 `bench/roundtrip.py` sends a simulated tissue through mermin and scores what it
-recovers against a director the model knows exactly: 0.34 degrees median over
+recovers against the director the model was given, at 0.34 degrees median over
 121 cells.
 
 ## Figures
