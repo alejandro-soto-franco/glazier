@@ -32,8 +32,8 @@ glazier --model blueprints/monolayer.json --out runs/gpu --engine gpu
 
 ## Layout
 
-One workspace. The engine is Rust, the harness that drives every other engine
-and measures what they produce is Python, and both read the same descriptions.
+One workspace. The engine is Rust. The harness that drives the other engines
+and measures what they produce is Python. Both read the same descriptions.
 
 | Path | Contents |
 |---|---|
@@ -49,9 +49,9 @@ and measures what they produce is Python, and both read the same descriptions.
 | `tests/` | Python tests, including the one that compares the two readers |
 
 A Blueprint is parsed twice, once by serde and once by `glazier.blueprint`, and
-a field that drifts between the two readers is a conformance failure. `tests/test_blueprint_conformance.py` compares them field by field
-over every description in the tree, through the compiled module and through the
-binary.
+a field that drifts between the readers fails the conformance test.
+`tests/test_blueprint_conformance.py` compares them field by field over every
+description in the tree, through the compiled module and through the binary.
 
 The Rust side builds with cargo and the Python side runs under pixi, since
 CompuCell3D installs from a conda channel and pins its interpreter. mermin
@@ -64,7 +64,7 @@ A sheet or a block of cells on a periodic lattice under four energy terms: a
 contact energy per unlike-label bond, `lambda (V - V_target)^2` per cell,
 `lambda (S - S_target)^2` on the surface counted as bonds to any other label,
 and `lambda (L - L_target)^2` on the major axis of the cell's second-moment
-ellipse. The first three are the terms CompuCell3D states the same way.
+ellipse. CompuCell3D writes the first three the same way.
 
 One Monte Carlo step is as many copy attempts as there are sites, after which
 the chemical fields diffuse and decay, cells secrete into and take up from the
@@ -98,7 +98,7 @@ neighbourhood. Colouring sites by `(x mod 2, y mod 2)` puts same-colour targets
 two apart, outside a Moore neighbourhood, so one colour's attempts all run at
 once and a step is the four colours in turn.
 
-Two differences from the serial engine are structural.
+The device sweep differs from the serial engine in two ways.
 
 - The serial engine draws targets with replacement; the device visits every
   site once per step.
@@ -106,9 +106,9 @@ Two differences from the serial engine are structural.
   after, so several accepted copies on one cell within a colour each price
   their move against the same volume.
 
-The two therefore agree in distribution rather than trajectory, which is what
-`tests/gpu_matches_cpu.rs` asserts: identical cell counts, identical mean
-volume, and a spread about target within a quarter of each other.
+They therefore agree in distribution rather than in trajectory.
+`tests/gpu_matches_cpu.rs` checks cell count, mean volume and the spread about
+target, and the spreads stay within a quarter of each other.
 
 ## Timings
 
@@ -127,7 +127,8 @@ CPU thread.
 ![Wall clock against lattice size](figures/speed.png)
 
 The kernel is f32 throughout, which suits a card whose fp64 runs at a
-seventy-first of its fp32. The CPU reference is f64 and stays the arbiter.
+seventy-first of its fp32. The CPU reference is f64, and every comparison here
+runs against it.
 
 The draws are counter-based: each one is a hash of site, step, colour and
 index, so no generator state is stored. A xoshiro256++ state per site
@@ -142,13 +143,13 @@ The CLI reports that setup separately from the steps.
 
 Against CompuCell3D on the same model, 512 by 512 with 4096 cells over 200
 steps: CompuCell3D 5.650 s, the serial reference 1.605 s, the device 0.067 s.
-That is 84 times CompuCell3D's own wall clock, on a model both engines state
-the same way.
+That is 84 times CompuCell3D's own wall clock, on a model written the same way
+for both.
 
-A coordinate wraps by comparison, since every caller steps one neighbour
-offset from a coordinate already in range. A
-remainder is a division, and this sits in the innermost loop of the sweep: the
-change took the serial engine from 4.05 s to 3.15 s at 1024 by 1024.
+A coordinate wraps by comparison, since every caller steps one neighbour offset
+from a coordinate already in range. A remainder is a division and it sits in the
+innermost loop of the sweep, so the change took the serial engine from 4.05 s to
+3.15 s at 1024 by 1024.
 
 ## Engine comparison
 
@@ -169,10 +170,10 @@ CompuCell3D 4.10, on both glazier engines and on PhysiCell 1.14.2: 128 by 128,
 
 ![Engine comparison](figures/engines.png)
 
-Cell count and net charge transfer across all four. Cell shape does not: a
+Cell count and net charge transfer across all four. Cell shape does not. A
 Potts cell is an irregular polygon at eccentricity 0.4 and a PhysiCell agent is
-a disc at 0.04, so the orientational quantities measured on the PhysiCell
-column describe the rasterisation rather than the tissue.
+a disc at 0.04, so the orientational quantities in the PhysiCell column describe
+its rasterisation.
 
 ## Surface term across engines
 
@@ -188,21 +189,21 @@ amount.
 | Disclinations | 38 | 34 | 44 |
 
 The global nematic order over 256 cells fluctuates by roughly `1/sqrt(N)`, so
-that column varies most between runs. Eccentricity and defect count settle the
-comparison.
+that column varies most between runs. Eccentricity and defect count are the
+steady ones.
 
 ## Three dimensions
 
-A description states a `depth`, and one is a plane. The lattice, the
+A description gives a `depth`, and one is a plane. The lattice, the
 neighbourhoods, the field solver, the moments and both engines all take the
-third axis; a plane keeps the arithmetic it always had, since every offset with a
-nonzero `z` drops out of its neighbourhood and the third variance is zero.
+third axis. A plane keeps the arithmetic it always had, since every offset with
+a nonzero `z` drops out of its neighbourhood and the third variance is zero.
 
 Neighbour orders on a cubic lattice are the six faces, the eighteen faces and
 edges, and all twenty-six. In a plane, orders two and three are both the eight
-Moore neighbours, which is what a two-dimensional model means by them.
+Moore neighbours, the usual meaning in a two-dimensional model.
 
-Two things follow from the dimension rather than from a choice. Explicit
+Two effects come from the dimension itself. Explicit
 diffusion is stable to `D dt / dx^2` of a quarter in a plane and a sixth in a
 volume, so the same diffusion constant takes half again as many sub-steps. The
 device checkerboard likewise needs eight colours where a plane needs four,
@@ -226,9 +227,10 @@ and it takes 100 before it does. Both are recorded in
 ## Device coverage
 
 The device runs every term the serial engine does: contact, volume, surface and
-length, the field solver, chemotaxis, division and death. The two agree on the
-tissue they produce, though never bit for bit, since the sweeps are different
-chains, and `glazier-tests/tests/` states each agreement as a measured band.
+length, the field solver, chemotaxis, division and death. The engines agree on
+the tissue they produce, though never bit for bit, since the sweeps are
+different chains, and `glazier-tests/tests/` records each agreement as a
+measured band.
 
 The field solver is one thread per site over a double buffer, sub-stepped from
 the stated diffusion constant like the serial one, and the totals land within
@@ -239,7 +241,7 @@ the lattice. The reductions and the relabelling run on the device: a
 circular-mean pass for the centroid, which is single-valued whatever the wrap so
 a cell straddling the edge still has one, a second pass for the moments against
 it, and a pass that cuts or clears. The decisions cross to the host, where one
-entry per cell is thousands of numbers against millions. Both counters are
+entry per cell is thousands of numbers instead of millions. Both counters are
 rebuilt from the lattice afterwards, since either event changes every
 neighbour's boundary.
 
@@ -247,11 +249,11 @@ The length term prices a copy against a cell's major axis, which no
 neighbourhood around the copy can see. The device keeps ten running sums per
 cell in a frame each cell's own centroid sets, rebuilt at the top of every step,
 and reads the axis from the largest eigenvalue of the three by three in closed
-form. Rebuilding every step is what bounds the f32 accumulation to one step of
-rounding instead of a whole run's.
+form. Rebuilding every step bounds the f32 accumulation to one step of rounding
+instead of a whole run's.
 
 On `blueprints/infection-512.json`, 4096 cells with two fields and a death rate,
-200 steps take 9.72 s on the serial engine and 1.66 s on the device, and the two
+200 steps take 9.72 s on the serial engine and 1.66 s on the device, and they
 finish within half a percent of each other on cell count. The margin is narrower
 than the bare sweep's because the field solve sub-steps and the population step
 synchronises once a step.
@@ -259,16 +261,17 @@ synchronises once a step.
 ## Connectivity
 
 A cell that a copy would pinch in two refuses that copy, on either engine. The
-test is local: it reads the neighbourhood of the site being taken and asks
+test is local. It reads the neighbourhood of the site being taken and asks
 whether the sites there belonging to the losing cell fall into one piece.
 CompuCell3D walks the cell's whole site graph instead, which is serial by
-construction, so the two engines refuse different sets of copies and both keep
-cells whole, which is what the description asks for.
+construction, so the engines refuse different sets of copies while both keep
+cells whole, as the description asks.
 
-It is a sufficient condition: it stops every local pinch, and a cell can still
-separate through a sequence of moves that is nowhere locally disconnecting. On the device the neighbourhood is at most
-twenty-six positions, so the test is a bitmask and a bit-wise search, with no
-array and no local memory.
+The condition is sufficient and not necessary. It stops every local pinch, and
+a cell can still separate through a sequence of moves that is nowhere locally
+disconnecting. On the device the neighbourhood is at most twenty-six positions,
+so the test is a bitmask and a bit-wise search, with no array and no local
+memory.
 
 `blueprints/monolayer-connected.json` is the worked case: a sheet at a
 temperature and a contact energy that tear cells apart when nothing stops them.
@@ -277,10 +280,10 @@ at one piece per cell, on both engines.
 
 The three lattice engines agree there on cell count, mean area, the spread
 about target and a net disclination charge of zero, and they part company on
-shape: mean eccentricity reads 0.512 under CompuCell3D's global rule against
+shape. Mean eccentricity reads 0.512 under CompuCell3D's global rule against
 0.404 and 0.405 under the local one. Refusing a different set of copies makes a
-different tissue. It is the clearest case here of a description stating an
-intent that two engines realise differently.
+different tissue, and that is one place where two engines realise one stated
+intent differently.
 
 ## Polarity
 
@@ -291,9 +294,10 @@ terms in a total energy.
 priced against the difference in that memory between the two sites it runs
 between. A cell that extends in one direction leaves a trail of recent sites
 behind its front, and the energy difference favours extending the same way over
-turning: the cell polarises and travels. The neighbourhood average is a geometric mean,
-which is zero as soon as one neighbour has forgotten, so the memory acts as a
-front. This is the Act model of Niculescu, Textor and de Boer.
+turning, so the cell polarises and travels. The neighbourhood average is a
+geometric mean, which is zero as soon as one neighbour has forgotten, so the
+memory acts as a front. This is the Act model of Niculescu, Textor and de
+Boer.
 
 Over 400 steps a cell at `max_activity` 20 and `lambda_activity` 60 travels
 more than three times as far as the same cell without it, on either engine, and
@@ -308,8 +312,8 @@ with one travels that way whatever its neighbours do, and it wants
 Both want their parameters set against the volume constraint. The memory bonus
 is bounded by `lambda_activity`, so a value far past `lambda_volume` inflates
 the cell instead of moving it, and a cell driven hard enough can wrap medium
-into a ring that the connectivity veto then locks. `blueprints/immune-motile.json`
-states a regime that works.
+into a ring that the connectivity veto then locks.
+`blueprints/immune-motile.json` gives a regime that works.
 
 ## Adhesion molecules
 
@@ -317,20 +321,20 @@ A description can name adhesion molecules, say how much of each a type
 presents, and give a binding matrix over them, instead of writing out an energy
 per pair of types. What two types' molecules bind comes off the contact energy
 between them, and since that is a function of the two types alone, it folds
-into the contact matrix before an engine ever sees it. The test asserts exactly
-that: a run from a molecule description reaches the same lattice as a run from
-the matrix it folds to, on the same seed.
+into the contact matrix before an engine ever sees it. The test runs a molecule
+description and the matrix it folds to on the same seed, and both reach the same
+lattice.
 
-`blueprints/adhesion.json` states it: an epithelial type presenting cadherin, a
+`blueprints/adhesion.json` has an epithelial type presenting cadherin, a
 mesenchymal one presenting less cadherin and some integrin, and a two by two
 binding matrix. The contact matrix the engine reads comes out at 6.0 between
 epithelial cells, 9.5 across the pair and 9.1 between mesenchymal ones, from a
 stated 12.0 throughout.
 
-What stays out is per-cell adhesion, where two cells of one type present
-different amounts and the amounts change as the cell runs. That is state per
-cell rather than per type, and a description that states it is describing a
-trajectory instead of a model.
+Per-cell adhesion stays out, where two cells of one type present different
+amounts and the amounts change as the cell runs. That is state per cell rather
+than per type, and it moves during a run, so it belongs to a trajectory instead
+of a description.
 
 ## Not implemented
 
@@ -359,7 +363,7 @@ recovers against a director the model knows exactly: 0.34 degrees median over
 ## Figures
 
 `pixi run figures` regenerates every image above from runs it makes itself, so
-the numbers on the page are the numbers the repository produces. The sweep at
+every figure here comes from a run in this repository. The sweep at
 the top end takes minutes and its table is cached under `runs/figures`.
 
 ## Licence

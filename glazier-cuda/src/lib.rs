@@ -2,18 +2,17 @@
 //!
 //! Two copy attempts are independent when neither target sits in the other's
 //! neighbourhood. Colouring sites by `(x mod 2, y mod 2)` puts same-colour
-//! targets two apart, which is outside a Moore neighbourhood, so a colour's
-//! attempts can all run at once. One Monte Carlo step is the four colours in
-//! turn, which is as many attempts as there are sites, matching the serial
-//! engine's count.
+//! targets two apart, outside a Moore neighbourhood, so a colour's attempts can
+//! all run at once. One Monte Carlo step is the four colours in turn, as many
+//! attempts as there are sites, matching the serial engine's count.
 //!
-//! Two differences from the serial engine are structural rather than
-//! incidental. The serial engine draws its targets with replacement and this
-//! one visits every site once per step, and a cell's volume is read before the
-//! step and written with an atomic during it, so several accepted copies on
-//! one cell within a colour each price their move against the same volume. The
-//! two engines therefore agree in distribution rather than trajectory, and the
-//! comparison in `tests/` is statistical.
+//! The device sweep differs from the serial engine in two ways. The serial
+//! engine draws its targets with replacement and this one visits every site
+//! once per step, and a cell's volume is read before the step and written with
+//! an atomic during it, so several accepted copies on one cell within a colour
+//! each price their move against the same volume. The engines therefore agree
+//! in distribution rather than in trajectory, and the comparison in `tests/` is
+//! statistical.
 
 use cudarc::driver::{
     CudaContext, CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg,
