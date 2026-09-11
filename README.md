@@ -20,9 +20,9 @@ Potts lattice to tissue.
 ## Install
 
 ```bash
-cargo add glazier-cpm                   # the library, as `use glazier::...`
-cargo install glazier-cpm --features cuda   # the binary, with the device sweep
-pip install glazier                    # the Python side and the bindings
+cargo add glazier-cpm                   # library via `use glazier::...`
+cargo install glazier-cpm --features cuda   # binary with CUDA features
+pip install glazier                    # Python-side bindings
 ```
 
 ```bash
