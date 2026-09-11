@@ -10,8 +10,7 @@ Cellular Potts tissue simulation on the CPU and the GPU.
 A sheet or a block of cells on a periodic lattice, under contact, volume,
 surface and length energies, with diffusing chemical fields, chemotaxis,
 persistent motility, division, death and a connectivity veto. One JSON
-description drives the engine here, CompuCell3D and PhysiCell, so a model
-written once runs on all three and the results are comparable.
+description drives the engine here, CompuCell3D, and PhysiCell for comparison.
 
 Named after James Glazier, whose work with Graner and Hogeweg made the Potts
 lattice a model of tissue.
@@ -32,7 +31,7 @@ glazier --model blueprints/monolayer.json --out runs/gpu --engine gpu
 
 ## Layout
 
-One workspace. The engine is Rust, the harness that drives every other engine
+The engine is Rust, the harness that drives every other engine
 and measures what they produce is Python, and both read the same descriptions.
 
 | Path | Contents |
@@ -48,16 +47,15 @@ and measures what they produce is Python, and both read the same descriptions.
 | `sims/` | CompuCell3D models written directly, outside the Blueprint path |
 | `tests/` | Python tests, including the one that compares the two readers |
 
-A Blueprint is parsed twice, once by serde and once by `glazier.blueprint`, and
-a field that drifts between the two readers is the failure the format exists to
-prevent. `tests/test_blueprint_conformance.py` compares them field by field
-over every description in the tree, through the compiled module and through the
+A Blueprint is parsed twice, once by serde and once by `glazier.blueprint`.
+`tests/test_blueprint_conformance.py` compares them field by field
+over every description in the tree through the compiled module and through the
 binary.
 
 The Rust side builds with cargo and the Python side runs under pixi, since
-CompuCell3D installs from a conda channel and pins its interpreter. mermin
-keeps its own environment, so the measurement in `bench/roundtrip.py` reaches it
-through files.
+CompuCell3D installs from a conda channel and pins its interpreter. `mermin`, my related
+cell image analysis software, keeps its own environment, so the measurement in `bench/roundtrip.py` reaches it
+through filwes.
 
 ## Scope
 
@@ -74,9 +72,7 @@ type with a death rate die. A copy that would empty a cell is refused, so a
 cell leaves the lattice only by dying.
 
 A cell with a chemotactic sensitivity prices each copy against the field at the
-two sites it runs between. That work is a property of the move rather than of
-the configuration, so it never appears in a total energy and cannot be checked
-by recomputing one.
+two sites it runs between.
 
 | Description | What it exercises |
 |---|---|
@@ -99,7 +95,7 @@ neighbourhood. Colouring sites by `(x mod 2, y mod 2)` puts same-colour targets
 two apart, outside a Moore neighbourhood, so one colour's attempts all run at
 once and a step is the four colours in turn.
 
-Two differences from the serial engine are structural.
+Note two differences:
 
 - The serial engine draws targets with replacement; the device visits every
   site once per step.
@@ -107,11 +103,11 @@ Two differences from the serial engine are structural.
   after, so several accepted copies on one cell within a colour each price
   their move against the same volume.
 
-The two therefore agree in distribution rather than trajectory, which is what
+The two therefore agree in distribution, which is what
 `tests/gpu_matches_cpu.rs` asserts: identical cell counts, identical mean
 volume, and a spread about target within a quarter of each other.
 
-## Measured
+## Benchmarks
 
 100 Monte Carlo steps, cells of side 8, on an RTX 5060 Laptop GPU against one
 CPU thread.
@@ -128,13 +124,12 @@ CPU thread.
 ![Wall clock against lattice size](figures/speed.png)
 
 The kernel is f32 throughout, which suits a card whose fp64 runs at a
-seventy-first of its fp32. The CPU reference is f64 and stays the arbiter.
+seventy-first of its fp32. The CPU reference is f64.
 
 The draws are counter-based: each one is a hash of site, step, colour and
 index, so no generator state is stored. A xoshiro256++ state per site
 instead moved 64 bytes per site per colour, more traffic than the lattice
 itself, and ran 1.7 times slower on a card that is bandwidth-bound.
-It also allocated 33 MB on a 1024 by 1024 lattice, which is now nothing.
 
 A short run through the CLI reads slower on the device than these figures,
 because the first call compiles the kernel with nvrtc and uploads the lattice.
