@@ -75,7 +75,7 @@ two sites it runs between.
 
 | Description | What it exercises |
 |---|---|
-| `blueprints/monolayer.json` | contact and volume, on four engines |
+| `blueprints/monolayer.json` | contact and volume on four engines |
 | `blueprints/monolayer-surface.json` | the surface term against CompuCell3D's |
 | `blueprints/monolayer-physicell.json` | the same model across a geometry class |
 | `blueprints/infection.json` | two fields, secretion and uptake, death |
@@ -187,7 +187,7 @@ steady ones.
 
 ## Three dimensions
 
-A description gives a `depth`, and one is a plane. The lattice, the
+A description gives a `depth` and one is a plane. The lattice, the
 neighbourhoods, the field solver, the moments and both engines all take the
 third axis. A plane keeps the arithmetic it always had, since every offset with
 a nonzero `z` drops out of its neighbourhood and the third variance is zero.
