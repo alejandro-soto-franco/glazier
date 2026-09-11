@@ -167,7 +167,7 @@ def engines_figure(comparison: Path) -> None:
         ax.set_title(title, pad=6)
         if key == "seconds":
             ax.set_yscale("log")
-    fig.suptitle("One description, four engines", fontsize=18, y=0.99)
+    fig.suptitle("Engines", fontsize=18, y=0.99)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     save(fig, FIGURES / "engines")
 

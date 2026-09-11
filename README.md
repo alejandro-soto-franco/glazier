@@ -154,12 +154,12 @@ CompuCell3D 4.10, on both glazier engines and on PhysiCell 1.14.2: 128 by 128,
 |---|---|---|---|---|
 | Cells | 256 | 256 | 256 | 256 |
 | Mean area | 64.0 | 64.0 | 64.0 | 58.5 |
-| Area rms from target | 1.57 | 1.60 | 1.83 | 5.73 |
-| Mean eccentricity | 0.402 | 0.394 | 0.394 | 0.042 |
-| Nematic order | 0.093 | 0.065 | 0.073 | 0.164 |
-| Disclinations | 44 | 38 | 56 | 16 |
+| Area rms from target | 1.57 | 1.58 | 2.07 | 5.73 |
+| Mean eccentricity | 0.402 | 0.397 | 0.392 | 0.042 |
+| Nematic order | 0.093 | 0.064 | 0.052 | 0.164 |
+| Disclinations | 44 | 56 | 50 | 16 |
 | Net charge | 0.000 | 0.000 | 0.000 | 0.000 |
-| Seconds | 0.372 | 0.128 | 0.103 | 1.390 |
+| Seconds | 0.260 | 0.146 | 0.106 | 1.254 |
 
 ![Engine comparison](figures/engines.png)
 

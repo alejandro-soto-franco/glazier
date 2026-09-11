@@ -14,6 +14,6 @@ default = []
 cuda = ["glazier/cuda", "dep:glazier-cuda"]
 
 [dependencies]
-glazier = { path = "../glazier", version = "0.1.1", package = "glazier-cpm" }
+glazier = { path = "../glazier", version = "0.1.2", package = "glazier-cpm" }
 glazier-core.workspace = true
 glazier-cuda = { workspace = true, optional = true }
