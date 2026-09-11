@@ -20,9 +20,9 @@ Potts lattice to tissue.
 ## Install
 
 ```bash
-cargo add glazier-cpm                   # the library, as `use glazier::...`
-cargo install glazier-cpm --features cuda   # the binary, with the device sweep
-pip install glazier                    # the Python side and the bindings
+cargo add glazier-cpm                   # library via `use glazier::...`
+cargo install glazier-cpm --features cuda   # binary with CUDA features
+pip install glazier                    # Python-side bindings
 ```
 
 ```bash
@@ -75,7 +75,7 @@ two sites it runs between.
 
 | Description | What it exercises |
 |---|---|
-| `blueprints/monolayer.json` | contact and volume, on four engines |
+| `blueprints/monolayer.json` | contact and volume on four engines |
 | `blueprints/monolayer-surface.json` | the surface term against CompuCell3D's |
 | `blueprints/monolayer-physicell.json` | the same model across a geometry class |
 | `blueprints/infection.json` | two fields, secretion and uptake, death |
