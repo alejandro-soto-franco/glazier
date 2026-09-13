@@ -33,11 +33,15 @@ TEMPLATE = PHYSICELL / "sample_projects" / "template" / "config" / "PhysiCell_se
 NO_DIVISION_MINUTES = 1.0e9
 
 
-def _set(root: ET.Element, path: str, value) -> None:
+def _find(root: ET.Element, path: str) -> ET.Element:
     node = root.find(path)
     if node is None:
         raise KeyError(f"the template has no {path}")
-    node.text = str(value)
+    return node
+
+
+def _set(root: ET.Element, path: str, value) -> None:
+    _find(root, path).text = str(value)
 
 
 def radius_for_area(area_microns2: float) -> float:
@@ -71,7 +75,7 @@ def write_config(bp: Blueprint, out_dir: Path) -> Path:
     _set(root, "overall/max_time", bp.duration_minutes)
     _set(root, "save/folder", str(out_dir))
     _set(root, "save/full_data/interval", bp.duration_minutes)
-    root.find("save/SVG/enable").text = "false"
+    _set(root, "save/SVG/enable", "false")
     _set(root, "options/random_seed", bp.seed)
 
     spec = bp.types[0]
@@ -79,7 +83,7 @@ def write_config(bp: Blueprint, out_dir: Path) -> Path:
     area = spec.target_volume * scale * scale
     radius = radius_for_area(area)
 
-    definition = root.find("cell_definitions/cell_definition")
+    definition = _find(root, "cell_definitions/cell_definition")
     definition.set("name", spec.name)
     _set(definition, "phenotype/volume/total", volume_for_radius(radius))
     _set(definition, "phenotype/volume/nuclear", volume_for_radius(radius) * 0.2)
@@ -90,7 +94,7 @@ def write_config(bp: Blueprint, out_dir: Path) -> Path:
         duration.text = str(NO_DIVISION_MINUTES)
         duration.set("fixed_duration", "true")
     for model in definition.findall("phenotype/death/model"):
-        model.find("death_rate").text = "0.0"
+        _find(model, "death_rate").text = "0.0"
 
     physicell = bp.physicell or {}
     _set(
@@ -105,14 +109,14 @@ def write_config(bp: Blueprint, out_dir: Path) -> Path:
     )
     motility = definition.find("phenotype/motility")
     if motility is not None:
-        motility.find("speed").text = str(physicell.get("motility_speed", 0.0))
+        _find(motility, "speed").text = str(physicell.get("motility_speed", 0.0))
 
     cells_csv = out_dir / "cells.csv"
     _write_cells(bp, cells_csv, spec.name)
-    positions = root.find("initial_conditions/cell_positions")
+    positions = _find(root, "initial_conditions/cell_positions")
     positions.set("enabled", "true")
-    positions.find("folder").text = str(out_dir)
-    positions.find("filename").text = "cells.csv"
+    _find(positions, "folder").text = str(out_dir)
+    _find(positions, "filename").text = "cells.csv"
 
     ruleset = root.find("cell_rules/rulesets/ruleset")
     if ruleset is not None:
