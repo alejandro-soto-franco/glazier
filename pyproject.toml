@@ -31,3 +31,6 @@ features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.pyrefly]
+project-includes = ["python"]

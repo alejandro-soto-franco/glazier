@@ -14,6 +14,8 @@ roundtrip = "python bench/roundtrip.py"
 engines = "python bench/engines.py"
 figures = "python bench/figures.py"
 test = "python -m pytest tests -q"
+# Checks against this environment, where cc3d and pcdl resolve.
+typecheck = "uvx pyrefly@1.0.0 check --python-interpreter-path $CONDA_PREFIX/bin/python python"
 
 [dependencies]
 python = "3.12.*"

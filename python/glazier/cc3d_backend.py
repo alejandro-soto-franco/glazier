@@ -43,10 +43,13 @@ class DumpSteppable(SteppableBasePy):
         if not (last or on_interval):
             return
 
+        cell_field = self.cell_field
+        if cell_field is None:
+            raise RuntimeError("the simulator has not attached a cell field")
         field = np.zeros((self.dim.y, self.dim.x), dtype=np.uint32)
         for x in range(self.dim.x):
             for y in range(self.dim.y):
-                cell = self.cell_field[x, y, 0]
+                cell = cell_field[x, y, 0]
                 if cell is not None:
                     field[y, x] = cell.id
 
@@ -82,7 +85,7 @@ def specs(bp: Blueprint) -> list:
             lambda_volume=spec.lambda_volume,
         )
 
-    parts_surface = []
+    parts_surface: list[SurfacePlugin | ConnectivityGlobalPlugin] = []
     if any(spec.lambda_surface for spec in bp.types):
         surface = SurfacePlugin()
         for index, spec in enumerate(bp.types, start=1):

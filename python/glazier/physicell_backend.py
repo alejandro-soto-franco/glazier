@@ -154,7 +154,7 @@ def rasterise(bp: Blueprint, centres: np.ndarray, radii: np.ndarray) -> np.ndarr
     A site outside every agent stays medium, which is what a lattice engine
     would call it, so the same area and orientation measurements apply to both.
     """
-    from scipy.spatial import cKDTree
+    from scipy.spatial import KDTree
 
     scale = bp.units["micron_per_site"]
     width_um, height_um = bp.domain_microns
@@ -162,7 +162,7 @@ def rasterise(bp: Blueprint, centres: np.ndarray, radii: np.ndarray) -> np.ndarr
     ys = (np.arange(bp.height) + 0.5) * scale - height_um / 2
     grid = np.stack(np.meshgrid(xs, ys, indexing="xy"), axis=-1).reshape(-1, 2)
 
-    tree = cKDTree(centres)
+    tree = KDTree(centres)
     distance, index = tree.query(grid, k=1)
     inside = distance <= radii[index]
     labels = np.where(inside, index + 1, 0).astype(np.uint32)
