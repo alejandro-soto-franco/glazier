@@ -119,6 +119,27 @@ impl Moments {
         ((v[0], v[1], v[2]), lambda)
     }
 
+    /// In-plane anisotropy of the cell, `((c_xx - c_yy), 2 c_xy) / (c_xx + c_yy)`.
+    ///
+    /// These are the two independent components of the traceless part of the
+    /// in-plane covariance, scaled by its trace, so the vector's direction is
+    /// twice the major-axis angle and its length runs from zero for a disc to
+    /// one for a line. The coupling to a nematic field reads this, so a round
+    /// cell feels no field and an elongated one feels it in proportion to how
+    /// elongated it is.
+    #[must_use]
+    pub fn anisotropy(&self) -> (f64, f64) {
+        if self.n < 2.0 {
+            return (0.0, 0.0);
+        }
+        let c = self.covariance();
+        let trace = c[0][0] + c[1][1];
+        if trace <= 1e-12 {
+            return (0.0, 0.0);
+        }
+        ((c[0][0] - c[1][1]) / trace, 2.0 * c[0][1] / trace)
+    }
+
     /// Major axis of the second-moment ellipsoid, in sites.
     ///
     /// A uniformly filled ellipse of semi-axes `a` and `b` has covariance
@@ -244,6 +265,16 @@ mod tests {
         m.add((1.0, 1.0, 0.0));
         let (_, _, z) = m.unwrap(0.0, 0.0, 0.0, (64.0, 64.0, 1.0));
         assert_eq!(z, 0.0);
+    }
+
+    #[test]
+    fn anisotropy_points_along_the_long_axis_and_vanishes_for_a_square() {
+        let (a, b) = filled(8, 8, 1).anisotropy();
+        assert!(a.abs() < 1e-12 && b.abs() < 1e-12, "{a} {b}");
+        let (a, b) = filled(16, 2, 1).anisotropy();
+        assert!(a > 0.9 && b.abs() < 1e-12, "{a} {b}");
+        let (a, _) = filled(2, 16, 1).anisotropy();
+        assert!(a < -0.9, "{a}");
     }
 
     #[test]

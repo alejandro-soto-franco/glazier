@@ -74,6 +74,9 @@ fn main() -> ExitCode {
             "max_activity": model.types.iter().map(|t| t.max_activity).collect::<Vec<_>>(),
             "lambda_activity": model.types.iter().map(|t| t.lambda_activity).collect::<Vec<_>>(),
             "external": model.types.iter().map(|t| t.external.to_vec()).collect::<Vec<_>>(),
+            "lambda_nematic": model.types.iter().map(|t| t.lambda_nematic).collect::<Vec<_>>(),
+            "nematic_field": bp.nematic_field,
+            "initial_labels": bp.initial.labels,
             "chemotaxis": model.chemotaxis.clone(),
             "division_volume": model.types.iter().map(|t| t.division_volume).collect::<Vec<_>>(),
             "death_rate": model.types.iter().map(|t| t.death_rate).collect::<Vec<_>>(),
@@ -105,20 +108,17 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let mut sim = match Simulation::tiled_grid(
-        bp.model(),
-        bp.initial.side,
-        bp.initial.nx,
-        bp.initial.ny,
-        bp.initial.nz,
-    ) {
+    let base = model_path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
+    let sim = match bp.simulation(&base) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("{e}");
             return ExitCode::FAILURE;
         }
     };
-    sim.set_cell_types(&bp.initial_types(sim.n_cells()));
 
     // `seconds` times the steps alone. Compiling the kernel, uploading the
     // lattice and reading the result back are all reported apart from it: at a

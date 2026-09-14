@@ -35,6 +35,9 @@ pub struct CellType {
     /// along it, so a cell with one travels that way whatever its neighbours
     /// do.
     pub external: [f64; 3],
+    /// Strength of the coupling between a cell's elongation and the nematic
+    /// field it sits in. Zero leaves the cell blind to the field.
+    pub lambda_nematic: f64,
 }
 
 /// The whole model: what a Blueprint would state, in one struct.
@@ -64,6 +67,12 @@ pub struct Model {
     pub neighbour_order: u8,
     /// Random seed.
     pub seed: u64,
+    /// A nematic field given per site as `(Q_xx, Q_xy)`, the independent
+    /// components of a traceless symmetric tensor in the plane. Empty when the
+    /// model has none. It is an input the run reads and never changes; a
+    /// caller that evolves it, such as a continuum nematic solver, updates it
+    /// between runs.
+    pub nematic: Vec<[f64; 2]>,
 }
 
 impl Model {
@@ -106,6 +115,19 @@ impl Model {
     #[must_use]
     pub fn has_length_constraint(&self) -> bool {
         self.types.iter().any(|t| t.lambda_length != 0.0)
+    }
+
+    /// Whether a nematic field is present and some type couples to it.
+    #[must_use]
+    pub fn has_nematic(&self) -> bool {
+        !self.nematic.is_empty() && self.types.iter().any(|t| t.lambda_nematic != 0.0)
+    }
+
+    /// Whether the run keeps per-cell second moments, which the length term
+    /// and the nematic term both read.
+    #[must_use]
+    pub fn tracks_moments(&self) -> bool {
+        self.has_length_constraint() || self.has_nematic()
     }
 
     /// Whether any type follows a gradient.
@@ -167,6 +189,13 @@ impl Model {
         if self.temperature <= 0.0 {
             return Err("the temperature must be positive".into());
         }
+        let sites = self.width * self.height * self.depth;
+        if !self.nematic.is_empty() && self.nematic.len() != sites {
+            return Err(format!(
+                "the nematic field has {} sites for a lattice of {sites}",
+                self.nematic.len()
+            ));
+        }
         if !self.exchange.is_empty() && self.exchange.len() != n {
             return Err(format!(
                 "exchange has {} entries for {n} types",
@@ -220,6 +249,7 @@ impl Default for Model {
             temperature: 10.0,
             neighbour_order: 2,
             seed: 0,
+            nematic: Vec::new(),
         }
     }
 }

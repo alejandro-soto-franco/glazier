@@ -117,10 +117,13 @@ pub struct TypeSpec {
     /// A constant drift, stated per axis.
     #[serde(default)]
     pub external: [f64; 3],
+    /// Strength of the coupling to the nematic field. Absent is blind to it.
+    #[serde(default)]
+    pub lambda_nematic: f64,
 }
 
 /// The initial condition. Squares laid down from the origin, all of the first
-/// type unless `fractions` says otherwise.
+/// type unless `fractions` says otherwise, or a label field read from a file.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Initial {
     /// Side of each square in sites.
@@ -137,6 +140,12 @@ pub struct Initial {
     /// infection seeded at two percent states one number.
     #[serde(default)]
     pub fractions: BTreeMap<String, f64>,
+    /// A label field to start from, a `.npy` file of the lattice's shape with
+    /// `0` the medium, resolved against the description's own directory. When
+    /// present it replaces the squares, which is how a run continues from a
+    /// previous one or starts from a segmented image.
+    #[serde(default)]
+    pub labels: Option<String>,
 }
 
 /// The whole description.
@@ -172,6 +181,11 @@ pub struct Blueprint {
     pub steps: u64,
     /// Steps between label-field dumps.
     pub dump_every: u64,
+    /// A nematic field, a `.npy` file of shape `(height, width, 2)` or
+    /// `(depth, height, width, 2)` holding `(Q_xx, Q_xy)` per site, resolved
+    /// against the description's own directory. Absent is no field.
+    #[serde(default)]
+    pub nematic_field: Option<String>,
     /// The initial condition.
     pub initial: Initial,
     /// The physical scale.
@@ -263,6 +277,7 @@ impl Blueprint {
             max_activity: t.max_activity,
             lambda_activity: t.lambda_activity,
             external: t.external,
+            lambda_nematic: t.lambda_nematic,
         }));
         let species: Vec<Species> = self
             .fields
@@ -305,7 +320,59 @@ impl Blueprint {
             temperature: self.temperature,
             neighbour_order: self.neighbour_order,
             seed: self.seed,
+            nematic: Vec::new(),
         }
+    }
+
+    /// The model with its nematic field read, and the simulation it starts,
+    /// from the squares or from the stated label field.
+    ///
+    /// Files the description names are resolved against `base`, normally the
+    /// directory the description was read from.
+    ///
+    /// # Errors
+    /// A file that cannot be read, or whatever the simulation constructor
+    /// reports.
+    pub fn simulation(&self, base: &std::path::Path) -> Result<crate::Simulation, String> {
+        let resolve = |name: &str| {
+            let p = std::path::Path::new(name);
+            if p.is_absolute() {
+                p.to_path_buf()
+            } else {
+                base.join(p)
+            }
+        };
+        let mut model = self.model();
+        let sites = self.width * self.height * self.depth;
+        if let Some(name) = &self.nematic_field {
+            let path = resolve(name);
+            let (pairs, shape) =
+                crate::npy::read_pairs(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            if pairs.len() != sites {
+                return Err(format!(
+                    "{}: shape {shape:?} holds {} sites for a lattice of {sites}",
+                    path.display(),
+                    pairs.len()
+                ));
+            }
+            model.nematic = pairs;
+        }
+        let mut sim = if let Some(name) = &self.initial.labels {
+            let path = resolve(name);
+            let (labels, _) =
+                crate::npy::read_labels(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            crate::Simulation::from_labels(model, labels)?
+        } else {
+            crate::Simulation::tiled_grid(
+                model,
+                self.initial.side,
+                self.initial.nx,
+                self.initial.ny,
+                self.initial.nz,
+            )?
+        };
+        sim.set_cell_types(&self.initial_types(sim.n_cells()));
+        Ok(sim)
     }
 
     /// Read a description from JSON.

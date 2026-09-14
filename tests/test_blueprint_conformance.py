@@ -84,6 +84,8 @@ def assert_agrees(bp: Blueprint, rust: dict) -> None:
             assert rust["lambda_length"][index] == spec.lambda_length
         if "connected" in rust:
             assert bool(rust["connected"][index]) == spec.connected
+        if "lambda_nematic" in rust:
+            assert rust["lambda_nematic"][index] == spec.lambda_nematic
         if "max_activity" in rust:
             assert rust["max_activity"][index] == spec.max_activity
             assert rust["lambda_activity"][index] == spec.lambda_activity

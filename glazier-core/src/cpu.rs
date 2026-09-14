@@ -20,6 +20,19 @@ fn count_moments(lattice: &Lattice, labels: usize) -> Vec<Moments> {
     moments
 }
 
+/// The nematic field summed over each label's sites.
+fn count_nematic(lattice: &Lattice, field: &[[f64; 2]], labels: usize) -> Vec<[f64; 2]> {
+    let mut sums = vec![[0.0f64; 2]; labels];
+    if field.is_empty() {
+        return sums;
+    }
+    for (index, &label) in lattice.labels.iter().enumerate() {
+        sums[label as usize][0] += field[index][0];
+        sums[label as usize][1] += field[index][1];
+    }
+    sums
+}
+
 /// The lattice sides, for the minimum image convention.
 fn lattice_extent(lattice: &Lattice) -> (f64, f64, f64) {
     (
@@ -61,17 +74,21 @@ pub struct Simulation {
     pub surface: Vec<i64>,
     /// Type per label.
     pub cell_type: Vec<u8>,
-    /// Second moments per label, for the length constraint.
+    /// Second moments per label, for the length and nematic terms.
     pub moments: Vec<Moments>,
+    /// The nematic field summed over each label's sites, for the nematic term.
+    pub nematic_sum: Vec<[f64; 2]>,
     /// How recently each site was taken, for the types that keep a memory.
     pub activity: Activity,
     /// Diffusing species on the same lattice.
     pub fields: Fields,
     /// Secretion and uptake per cell type.
     pub exchange: Vec<Exchange>,
-    /// Whether any type constrains its length, read once rather than scanned
-    /// on every copy attempt.
-    constrains_length: bool,
+    /// Whether the moments are kept, read once rather than scanned on every
+    /// copy attempt.
+    tracks_moments: bool,
+    /// Whether the nematic term is on.
+    has_nematic: bool,
     /// The neighbourhood the connectivity test reads, empty when no type asks
     /// for one.
     connectivity_ring: Vec<(i64, i64, i64)>,
@@ -120,16 +137,57 @@ impl Simulation {
             model.neighbour_order,
         );
         let n = lattice.tile_grid(side, nx, ny, nz) as usize;
+        Ok(Self::assemble(model, lattice, n))
+    }
+
+    /// Start a run from a label field, one entry per site in lattice order,
+    /// with `0` the medium. Every label from one to the largest present
+    /// becomes a cell of type 1; a label with no sites is a cell that has
+    /// already died.
+    ///
+    /// # Errors
+    /// Whatever [`Model::validate`] reports, a field of the wrong length, or a
+    /// field with no cells in it.
+    pub fn from_labels(model: Model, labels: Vec<u32>) -> Result<Self, String> {
+        model.validate()?;
+        if model.n_types() < 2 {
+            return Err("a labelled start needs a cell type beside the medium".into());
+        }
+        let sites = model.width * model.height * model.depth;
+        if labels.len() != sites {
+            return Err(format!(
+                "the label field has {} sites for a lattice of {sites}",
+                labels.len()
+            ));
+        }
+        let n = labels.iter().copied().max().unwrap_or(0) as usize;
+        if n == 0 {
+            return Err("the label field holds no cells".into());
+        }
+        let mut lattice = Lattice::medium(
+            model.width,
+            model.height,
+            model.depth,
+            model.neighbour_order,
+        );
+        lattice.labels = labels;
+        Ok(Self::assemble(model, lattice, n))
+    }
+
+    /// Count everything a run keeps from a lattice with `n` cells on it.
+    fn assemble(model: Model, lattice: Lattice, n: usize) -> Self {
         let mut volume = vec![0u32; n + 1];
         for &label in &lattice.labels {
             volume[label as usize] += 1;
         }
         let surface = count_surface(&lattice, n + 1);
         let moments = count_moments(&lattice, n + 1);
+        let nematic_sum = count_nematic(&lattice, &model.nematic, n + 1);
         let sites = lattice.labels.len();
         let species = model.species.clone();
         let dimensions = model.dimensions();
-        let constrains_length = model.has_length_constraint();
+        let tracks_moments = model.tracks_moments();
+        let has_nematic = model.has_nematic();
         let connectivity_ring = if model.has_connectivity() {
             crate::connectivity::ring(model.depth)
         } else {
@@ -137,23 +195,25 @@ impl Simulation {
         };
         let exchange = model.exchange.clone();
         let seed = model.seed;
-        Ok(Self {
+        Self {
             model,
             lattice,
             volume,
             surface,
             cell_type: vec![1; n + 1],
             moments,
+            nematic_sum,
             activity: Activity::new(sites),
             fields: Fields::new(species, sites, dimensions),
             exchange,
-            constrains_length,
+            tracks_moments,
+            has_nematic,
             connectivity_ring,
             rng: Xoshiro::seed(seed),
             mcs: 0,
             accepted: 0,
             attempted: 0,
-        })
+        }
     }
 
     /// Set the type of each cell, in label order, from a list one per cell.
@@ -213,10 +273,14 @@ impl Simulation {
 
         delta += self.volume_term(old, -1);
         delta += self.volume_term(new, 1);
-        if self.constrains_length {
+        if self.tracks_moments {
             let site = (tx as f64, ty as f64, tz as f64);
             delta += self.length_term(old, site, -1.0);
             delta += self.length_term(new, site, 1.0);
+            if self.has_nematic {
+                delta += self.nematic_term(old, target, site, -1.0);
+                delta += self.nematic_term(new, target, site, 1.0);
+            }
         }
         delta += self.surface_term(old, 2 * like_old - bonds);
         delta += self.surface_term(new, bonds - 2 * like_new);
@@ -238,6 +302,33 @@ impl Simulation {
         let after = moments.with(unwrapped, sign).length();
         spec.lambda_length
             * ((after - spec.target_length).powi(2) - (before - spec.target_length).powi(2))
+    }
+
+    /// Change in the nematic energy of `label` when the site at `index` is
+    /// added or removed.
+    ///
+    /// A cell's nematic energy is `-lambda F . a`, with `F` the field summed
+    /// over its sites and `a` its in-plane anisotropy, so an elongated cell
+    /// lying along the field's director is favoured over one across it. A copy
+    /// changes both `F`, by the field at the site, and `a`, through the
+    /// moments.
+    fn nematic_term(&self, label: u32, index: usize, site: (f64, f64, f64), sign: f64) -> f64 {
+        if label == 0 {
+            return 0.0;
+        }
+        let spec = self.model.types[self.type_of(label) as usize];
+        if spec.lambda_nematic == 0.0 {
+            return 0.0;
+        }
+        let moments = self.moments[label as usize];
+        let unwrapped = moments.unwrap(site.0, site.1, site.2, lattice_extent(&self.lattice));
+        let (a0, a1) = moments.anisotropy();
+        let (b0, b1) = moments.with(unwrapped, sign).anisotropy();
+        let f = self.nematic_sum[label as usize];
+        let q = self.model.nematic[index];
+        let before = f[0] * a0 + f[1] * a1;
+        let after = (f[0] + sign * q[0]) * b0 + (f[1] + sign * q[1]) * b1;
+        -spec.lambda_nematic * (after - before)
     }
 
     /// Work the cell gaining the site does against its own memory and its
@@ -394,7 +485,14 @@ impl Simulation {
             self.surface[old as usize] += 2 * like_old - bonds;
             self.surface[new as usize] += bonds - 2 * like_new;
 
-            if self.constrains_length {
+            if self.has_nematic {
+                let q = self.model.nematic[target];
+                self.nematic_sum[old as usize][0] -= q[0];
+                self.nematic_sum[old as usize][1] -= q[1];
+                self.nematic_sum[new as usize][0] += q[0];
+                self.nematic_sum[new as usize][1] += q[1];
+            }
+            if self.tracks_moments {
                 let site = (tx as f64, ty as f64, tz as f64);
                 let extent = lattice_extent(&self.lattice);
                 let leaving = self.moments[old as usize].unwrap(site.0, site.1, site.2, extent);
@@ -462,6 +560,7 @@ impl Simulation {
         let mut volume = 0.0;
         let mut surface = 0.0;
         let mut length = 0.0;
+        let mut nematic = 0.0;
         let counted = self.recounted_surfaces();
         for (label, &bonds) in counted.iter().enumerate().skip(1) {
             let spec = self.model.types[self.cell_type[label] as usize];
@@ -472,8 +571,19 @@ impl Simulation {
                     * (self.moments[label].length() - spec.target_length).powi(2);
             }
             surface += spec.lambda_surface * (bonds as f64 - spec.target_surface).powi(2);
+            if self.has_nematic && spec.lambda_nematic != 0.0 {
+                let (a0, a1) = self.moments[label].anisotropy();
+                let f = self.nematic_sum[label];
+                nematic -= spec.lambda_nematic * (f[0] * a0 + f[1] * a1);
+            }
         }
-        contact + volume + surface + length
+        contact + volume + surface + length + nematic
+    }
+
+    /// Recount the nematic sums from the lattice, for checking the bookkeeping.
+    #[must_use]
+    pub fn recounted_nematic(&self) -> Vec<[f64; 2]> {
+        count_nematic(&self.lattice, &self.model.nematic, self.nematic_sum.len())
     }
 
     /// Recompute the moments from the lattice, for checking the bookkeeping.
@@ -539,6 +649,7 @@ impl Simulation {
         if divided > 0 || died > 0 {
             self.surface = self.recounted_surfaces();
             self.moments = self.recounted_moments();
+            self.nematic_sum = self.recounted_nematic();
         }
         (divided, died)
     }
@@ -595,6 +706,7 @@ impl Simulation {
         self.volume.push(moved);
         self.surface.push(0);
         self.moments.push(Moments::default());
+        self.nematic_sum.push([0.0; 2]);
         self.cell_type.push(self.type_of(label));
         true
     }

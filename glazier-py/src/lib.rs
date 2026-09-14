@@ -6,7 +6,6 @@
 //! format exists to prevent.
 
 use glazier_core::blueprint::Blueprint;
-use glazier_core::cpu::Simulation;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -124,6 +123,15 @@ fn parse(py: Python<'_>, text: &str) -> PyResult<Py<PyDict>> {
             .map(|e| e.uptake.clone())
             .collect::<Vec<_>>(),
     )?;
+    out.set_item(
+        "lambda_nematic",
+        model
+            .types
+            .iter()
+            .map(|t| t.lambda_nematic)
+            .collect::<Vec<_>>(),
+    )?;
+    out.set_item("nematic_field", bp.nematic_field.clone())?;
     out.set_item("temperature", model.temperature)?;
     out.set_item("neighbour_order", model.neighbour_order)?;
     out.set_item("seed", model.seed)?;
@@ -145,14 +153,9 @@ fn parse(py: Python<'_>, text: &str) -> PyResult<Py<PyDict>> {
 #[pyo3(signature = (text, steps = None))]
 fn run(text: &str, steps: Option<u64>) -> PyResult<(Vec<u32>, usize, usize, usize)> {
     let bp = parse_blueprint(text)?;
-    let mut sim = Simulation::tiled_grid(
-        bp.model(),
-        bp.initial.side,
-        bp.initial.nx,
-        bp.initial.ny,
-        bp.initial.nz,
-    )
-    .map_err(PyValueError::new_err)?;
+    let mut sim = bp
+        .simulation(std::path::Path::new("."))
+        .map_err(PyValueError::new_err)?;
     for _ in 0..steps.unwrap_or(bp.steps) {
         sim.step();
     }
@@ -164,14 +167,9 @@ fn run(text: &str, steps: Option<u64>) -> PyResult<(Vec<u32>, usize, usize, usiz
 #[pyo3(signature = (text, steps = None))]
 fn run_volumes(text: &str, steps: Option<u64>) -> PyResult<Vec<u32>> {
     let bp = parse_blueprint(text)?;
-    let mut sim = Simulation::tiled_grid(
-        bp.model(),
-        bp.initial.side,
-        bp.initial.nx,
-        bp.initial.ny,
-        bp.initial.nz,
-    )
-    .map_err(PyValueError::new_err)?;
+    let mut sim = bp
+        .simulation(std::path::Path::new("."))
+        .map_err(PyValueError::new_err)?;
     for _ in 0..steps.unwrap_or(bp.steps) {
         sim.step();
     }

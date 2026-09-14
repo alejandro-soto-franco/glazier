@@ -215,6 +215,39 @@ __device__ __forceinline__ float axis_length(const float *m)
     return 4.0f * sqrtf(fmaxf(lambda, 0.0f));
 }
 
+// In-plane anisotropy ((c_xx - c_yy), 2 c_xy) / (c_xx + c_yy) from the ten
+// running sums, the quantity the nematic term dots with the field.
+__device__ __forceinline__ void anisotropy(const float *m, float *a0, float *a1)
+{
+    *a0 = 0.0f;
+    *a1 = 0.0f;
+    float n = m[0];
+    if (n < 2.0f) return;
+    float mx = m[1] / n, my = m[2] / n;
+    float xx = m[4] / n - mx * mx;
+    float yy = m[5] / n - my * my;
+    float xy = m[7] / n - mx * my;
+    float trace = xx + yy;
+    if (trace <= 1.0e-6f) return;
+    *a0 = (xx - yy) / trace;
+    *a1 = 2.0f * xy / trace;
+}
+
+// The nematic field summed over each cell's sites. Rebuilt every step with the
+// moments, so f32 accumulation never runs longer than one step.
+__global__ void cell_nematic_sums(
+    const unsigned int *__restrict__ labels,
+    const float *__restrict__ field,
+    float *__restrict__ sums,
+    int sites)
+{
+    int site = blockIdx.x * blockDim.x + threadIdx.x;
+    if (site >= sites) return;
+    unsigned int label = labels[site];
+    atomicAdd(&sums[label * 2 + 0], field[site * 2 + 0]);
+    atomicAdd(&sums[label * 2 + 1], field[site * 2 + 1]);
+}
+
 // Running sums per cell, in the frame each cell's anchor sets. Rebuilt every
 // step, so the f32 accumulation only ever carries one step of rounding.
 __global__ void cell_sums(
@@ -387,6 +420,10 @@ __global__ void cpm_sweep(
     const float *__restrict__ target_length,
     const float *__restrict__ lambda_length,
     int has_length,
+    const float *__restrict__ nematic_field,
+    float *__restrict__ nematic_sum,
+    const float *__restrict__ lambda_nematic,
+    int has_nematic,
     const int *__restrict__ ring,
     const unsigned int *__restrict__ adjacency,
     const unsigned char *__restrict__ connected,
@@ -508,17 +545,18 @@ __global__ void cpm_sweep(
         }
     }
 
-    // The length term, read from the running sums the step rebuilt. A site
-    // enters each cell's own frame, since a cell straddling the periodic edge
-    // has no coordinates in the lattice's.
-    if (has_length) {
+    // The length and nematic terms, read from the running sums the step
+    // rebuilt. A site enters each cell's own frame, since a cell straddling the
+    // periodic edge has no coordinates in the lattice's.
+    if (has_length || has_nematic) {
         float leaving[10];
         float joining[10];
         for (int k = 0; k < 10; ++k) {
             leaving[k] = moments[old_label * 10 + k];
             joining[k] = moments[new_label * 10 + k];
         }
-        if (old_label != 0 && lambda_length[t_old] != 0.0f) {
+        int site_q = target * 2;
+        if (old_label != 0 && (lambda_length[t_old] != 0.0f || (has_nematic && lambda_nematic[t_old] != 0.0f))) {
             float ux = fold((float)x - anchor[old_label * 3 + 0], (float)width);
             float uy = fold((float)y - anchor[old_label * 3 + 1], (float)height);
             float uz = fold((float)z - anchor[old_label * 3 + 2], (float)depth);
@@ -526,12 +564,24 @@ __global__ void cpm_sweep(
                 leaving[0] - 1.0f, leaving[1] - ux, leaving[2] - uy, leaving[3] - uz,
                 leaving[4] - ux * ux, leaving[5] - uy * uy, leaving[6] - uz * uz,
                 leaving[7] - ux * uy, leaving[8] - ux * uz, leaving[9] - uy * uz };
-            float tl = target_length[t_old];
-            float before = axis_length(leaving) - tl;
-            float now = axis_length(after) - tl;
-            delta += lambda_length[t_old] * (now * now - before * before);
+            if (has_length && lambda_length[t_old] != 0.0f) {
+                float tl = target_length[t_old];
+                float before = axis_length(leaving) - tl;
+                float now = axis_length(after) - tl;
+                delta += lambda_length[t_old] * (now * now - before * before);
+            }
+            if (has_nematic && lambda_nematic[t_old] != 0.0f) {
+                float a0, a1, b0, b1;
+                anisotropy(leaving, &a0, &a1);
+                anisotropy(after, &b0, &b1);
+                float f0 = nematic_sum[old_label * 2 + 0];
+                float f1 = nematic_sum[old_label * 2 + 1];
+                float e_before = f0 * a0 + f1 * a1;
+                float e_after = (f0 - nematic_field[site_q]) * b0 + (f1 - nematic_field[site_q + 1]) * b1;
+                delta -= lambda_nematic[t_old] * (e_after - e_before);
+            }
         }
-        if (new_label != 0 && lambda_length[t_new] != 0.0f) {
+        if (new_label != 0 && (lambda_length[t_new] != 0.0f || (has_nematic && lambda_nematic[t_new] != 0.0f))) {
             float ux = fold((float)x - anchor[new_label * 3 + 0], (float)width);
             float uy = fold((float)y - anchor[new_label * 3 + 1], (float)height);
             float uz = fold((float)z - anchor[new_label * 3 + 2], (float)depth);
@@ -539,10 +589,22 @@ __global__ void cpm_sweep(
                 joining[0] + 1.0f, joining[1] + ux, joining[2] + uy, joining[3] + uz,
                 joining[4] + ux * ux, joining[5] + uy * uy, joining[6] + uz * uz,
                 joining[7] + ux * uy, joining[8] + ux * uz, joining[9] + uy * uz };
-            float tl = target_length[t_new];
-            float before = axis_length(joining) - tl;
-            float now = axis_length(after) - tl;
-            delta += lambda_length[t_new] * (now * now - before * before);
+            if (has_length && lambda_length[t_new] != 0.0f) {
+                float tl = target_length[t_new];
+                float before = axis_length(joining) - tl;
+                float now = axis_length(after) - tl;
+                delta += lambda_length[t_new] * (now * now - before * before);
+            }
+            if (has_nematic && lambda_nematic[t_new] != 0.0f) {
+                float a0, a1, b0, b1;
+                anisotropy(joining, &a0, &a1);
+                anisotropy(after, &b0, &b1);
+                float f0 = nematic_sum[new_label * 2 + 0];
+                float f1 = nematic_sum[new_label * 2 + 1];
+                float e_before = f0 * a0 + f1 * a1;
+                float e_after = (f0 + nematic_field[site_q]) * b0 + (f1 + nematic_field[site_q + 1]) * b1;
+                delta -= lambda_nematic[t_new] * (e_after - e_before);
+            }
         }
     }
 
@@ -594,7 +656,13 @@ __global__ void cpm_sweep(
         if (new_label != 0) atomicAdd(&volume[new_label], 1);
         atomicAdd(&surface[old_label], d_surface_old);
         atomicAdd(&surface[new_label], d_surface_new);
-        if (has_length) {
+        if (has_nematic) {
+            atomicAdd(&nematic_sum[old_label * 2 + 0], -nematic_field[target * 2 + 0]);
+            atomicAdd(&nematic_sum[old_label * 2 + 1], -nematic_field[target * 2 + 1]);
+            atomicAdd(&nematic_sum[new_label * 2 + 0], nematic_field[target * 2 + 0]);
+            atomicAdd(&nematic_sum[new_label * 2 + 1], nematic_field[target * 2 + 1]);
+        }
+        if (has_length || has_nematic) {
             float ox = fold((float)x - anchor[old_label * 3 + 0], (float)width);
             float oy = fold((float)y - anchor[old_label * 3 + 1], (float)height);
             float oz = fold((float)z - anchor[old_label * 3 + 2], (float)depth);
@@ -676,6 +744,10 @@ pub struct GpuSimulation {
     lambda_length: CudaSlice<f32>,
     running_moments: CudaSlice<f32>,
     anchor: CudaSlice<f32>,
+    nematic_field: CudaSlice<f32>,
+    nematic_sum: CudaSlice<f32>,
+    lambda_nematic: CudaSlice<f32>,
+    nematic_sums_kernel: CudaFunction,
     ring: CudaSlice<i32>,
     activity: CudaSlice<f32>,
     max_activity: CudaSlice<f32>,
@@ -725,6 +797,7 @@ impl GpuSimulation {
         let sums_kernel = module.load_function("cell_sums").map_err(driver)?;
         let decay_kernel = module.load_function("activity_decay").map_err(driver)?;
         let moments_kernel = module.load_function("cell_moments").map_err(driver)?;
+        let nematic_sums_kernel = module.load_function("cell_nematic_sums").map_err(driver)?;
         let apply_population = module.load_function("apply_population").map_err(driver)?;
         let recount = module.load_function("recount").map_err(driver)?;
 
@@ -766,6 +839,23 @@ impl GpuSimulation {
             .iter()
             .map(|t| t.lambda_length as f32)
             .collect();
+        let lambda_nematic: Vec<f32> = sim
+            .model
+            .types
+            .iter()
+            .map(|t| t.lambda_nematic as f32)
+            .collect();
+        // A model with no field uploads one zero pair, since a launch needs a
+        // valid pointer whether or not the kernel reads it.
+        let nematic_host: Vec<f32> = if sim.model.nematic.is_empty() {
+            vec![0.0; 2]
+        } else {
+            sim.model
+                .nematic
+                .iter()
+                .flat_map(|q| [q[0] as f32, q[1] as f32])
+                .collect()
+        };
         let labels_count = sim.cell_type.len();
 
         // The connectivity test reads a fixed neighbourhood and asks only
@@ -887,6 +977,12 @@ impl GpuSimulation {
             anchor: stream
                 .alloc_zeros::<f32>(labels_count * 3)
                 .map_err(driver)?,
+            nematic_field: stream.clone_htod(&nematic_host).map_err(driver)?,
+            nematic_sum: stream
+                .alloc_zeros::<f32>(labels_count * 2)
+                .map_err(driver)?,
+            lambda_nematic: stream.clone_htod(&lambda_nematic).map_err(driver)?,
+            nematic_sums_kernel,
             ring_size: ring_offsets.len() as i32,
             ring: stream.clone_htod(&ring_flat).map_err(driver)?,
             activity: stream.clone_htod(&activity_host).map_err(driver)?,
@@ -931,12 +1027,17 @@ impl GpuSimulation {
         let sites = (w * h * d) as i32;
 
         let has_length = i32::from(self.model.has_length_constraint());
+        let has_nematic = i32::from(self.model.has_nematic());
+        let tracks_moments = self.model.tracks_moments();
         let has_motility = i32::from(self.model.has_motility());
         let has_external = i32::from(self.model.has_external_potential());
         for _ in 0..steps {
             let step = self.mcs as i32;
-            if has_length == 1 {
+            if tracks_moments {
                 self.rebuild_running_moments(block)?;
+            }
+            if has_nematic == 1 {
+                self.rebuild_nematic_sums(block)?;
             }
             for colour in 0..self.colours {
                 let mut launch = self.stream.launch_builder(&self.kernel);
@@ -957,6 +1058,10 @@ impl GpuSimulation {
                     .arg(&self.target_length)
                     .arg(&self.lambda_length)
                     .arg(&has_length)
+                    .arg(&self.nematic_field)
+                    .arg(&mut self.nematic_sum)
+                    .arg(&self.lambda_nematic)
+                    .arg(&has_nematic)
                     .arg(&self.ring)
                     .arg(&self.adjacency)
                     .arg(&self.connected)
@@ -1129,6 +1234,22 @@ impl GpuSimulation {
         Ok(())
     }
 
+    /// The nematic field summed over each cell, rebuilt from the lattice.
+    fn rebuild_nematic_sums(&mut self, block: u32) -> Result<(), GpuError> {
+        let (w, h, d) = (self.model.width, self.model.height, self.model.depth);
+        let sites = (w * h * d) as i32;
+        let labels = self.cell_type_host.len();
+        self.nematic_sum = self.stream.alloc_zeros::<f32>(labels * 2).map_err(driver)?;
+        let mut launch = self.stream.launch_builder(&self.nematic_sums_kernel);
+        launch
+            .arg(&self.labels)
+            .arg(&self.nematic_field)
+            .arg(&mut self.nematic_sum)
+            .arg(&sites);
+        unsafe { launch.launch(launch_over(w * h * d, block)) }.map_err(driver)?;
+        Ok(())
+    }
+
     /// Division and death for one step.
     ///
     /// The reductions and the relabelling run on the device; the decisions
@@ -1232,6 +1353,7 @@ impl GpuSimulation {
                 .alloc_zeros::<f32>(labels * 10)
                 .map_err(driver)?;
             self.anchor = self.stream.alloc_zeros::<f32>(labels * 3).map_err(driver)?;
+            self.nematic_sum = self.stream.alloc_zeros::<f32>(labels * 2).map_err(driver)?;
         }
         self.recount_cells(block)
     }

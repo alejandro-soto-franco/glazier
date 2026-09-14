@@ -38,6 +38,7 @@ class TypeSpec:
     max_activity: float = 0.0
     lambda_activity: float = 0.0
     external: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    lambda_nematic: float = 0.0
     presents: dict[str, float] = field(default_factory=dict)
     secretion: dict[str, float] = field(default_factory=dict)
     uptake: dict[str, float] = field(default_factory=dict)
@@ -62,6 +63,7 @@ class Blueprint:
     fields: list[SpeciesSpec] = field(default_factory=list)
     adhesion: dict | None = None
     physicell: dict | None = None
+    nematic_field: str | None = None
 
     @property
     def domain_microns(self) -> tuple[float, float]:
