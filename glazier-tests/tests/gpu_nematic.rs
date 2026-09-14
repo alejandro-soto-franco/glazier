@@ -102,3 +102,31 @@ fn the_device_aligns_cells_along_the_field_as_the_serial_engine_does() {
     let (s_blind, _) = order(&blind, run_gpu(&blind, steps).unwrap());
     assert!(s_blind < 0.4, "uncoupled device order {s_blind}");
 }
+
+#[test]
+fn a_replaced_field_turns_the_cells_on_the_device() {
+    let first = 0.2;
+    let second = first + std::f64::consts::FRAC_PI_2;
+    let coupled = model(6.0, first);
+    let seeded = Simulation::tiled(coupled.clone(), 8).unwrap();
+    let mut gpu = match GpuSimulation::from_cpu(&seeded) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("no device, skipping: {e}");
+            return;
+        }
+    };
+    gpu.step(400).unwrap();
+    let (_, before) = order(&coupled, gpu.labels().unwrap());
+
+    let turned = vec![[(2.0 * second).cos(), (2.0 * second).sin()]; SIDE * SIDE];
+    gpu.set_nematic_field(&turned).unwrap();
+    gpu.step(800).unwrap();
+    let (s_after, after) = order(&coupled, gpu.labels().unwrap());
+
+    let off = |d: f64, a: f64| (d - a).abs().min(std::f64::consts::PI - (d - a).abs());
+    assert!(off(before, first) < 0.15, "before {before}");
+    assert!(s_after > 0.7, "order after the turn {s_after}");
+    assert!(off(after, second) < 0.15, "after {after} against {second}");
+    assert!(gpu.set_nematic_field(&turned[1..]).is_err());
+}

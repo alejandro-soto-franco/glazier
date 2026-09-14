@@ -327,8 +327,15 @@ moments up to date on every accepted copy.
 tiled grid. With the two together a run can alternate with a continuum
 solver: glazier moves the cells under the field, the cells' anisotropy is
 averaged onto the solver's grid, the solver evolves the field, and the next
-glazier run starts from the last labels. volterra's `run_dry_active_nematic`
+glazier run starts from the last labels. volterra's `run_active_nematic_hydro`
 uses the same (q1, q2) = (Q_xx, Q_xy) components.
+
+For that loop the Python module has `GpuSession` in a build with the `cuda`
+feature (`maturin build --features cuda`). It compiles the kernel once and
+keeps the lattice on the device, and between rounds `set_nematic_field` uploads
+the new field and `labels` copies the lattice back. On a 512 by 512 lattice a
+round of 250 steps costs 0.21 s of steps and 0.08 s of transfer, against
+1.3 s through the binary, which starts a process and compiles every time.
 
 The tests check the energy change of a copy against a full recomputation to
 1e-8, the running field sums against a recount, and that cells under a uniform

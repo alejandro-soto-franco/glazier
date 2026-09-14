@@ -248,6 +248,36 @@ __global__ void cell_nematic_sums(
     atomicAdd(&sums[label * 2 + 1], field[site * 2 + 1]);
 }
 
+// Each cell's centroid from its circular sums: the angle of the mean
+// (cos, sin) on each axis, mapped back onto that axis, which is single-valued
+// for a cell across the periodic edge. It runs on the device so the per-step
+// rebuild never waits for a copy to the host.
+__global__ void cell_centroids(
+    const float *__restrict__ sums,
+    float *__restrict__ anchor,
+    int labels, float width, float height, float depth)
+{
+    int label = blockIdx.x * blockDim.x + threadIdx.x;
+    if (label >= labels) return;
+    float span[3] = { width, height, depth };
+    for (int axis = 0; axis < 3; axis++) {
+        if (label == 0 || sums[label * 7] <= 0.0f) {
+            anchor[label * 3 + axis] = 0.0f;
+            continue;
+        }
+        float angle = atan2f(sums[label * 7 + 2 + 2 * axis], sums[label * 7 + 1 + 2 * axis]);
+        float v = angle / 6.283185307179586f * span[axis];
+        anchor[label * 3 + axis] = v - span[axis] * floorf(v / span[axis]);
+    }
+}
+
+__global__ void fill_zero(float *__restrict__ values, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    values[i] = 0.0f;
+}
+
 // Running sums per cell, in the frame each cell's anchor sets. Rebuilt every
 // step, so the f32 accumulation only ever carries one step of rounding.
 __global__ void cell_sums(
@@ -748,6 +778,10 @@ pub struct GpuSimulation {
     nematic_sum: CudaSlice<f32>,
     lambda_nematic: CudaSlice<f32>,
     nematic_sums_kernel: CudaFunction,
+    centroid_kernel: CudaFunction,
+    zero_kernel: CudaFunction,
+    /// Circular sums per cell, kept between steps so a rebuild allocates nothing.
+    circular: CudaSlice<f32>,
     ring: CudaSlice<i32>,
     activity: CudaSlice<f32>,
     max_activity: CudaSlice<f32>,
@@ -798,6 +832,8 @@ impl GpuSimulation {
         let decay_kernel = module.load_function("activity_decay").map_err(driver)?;
         let moments_kernel = module.load_function("cell_moments").map_err(driver)?;
         let nematic_sums_kernel = module.load_function("cell_nematic_sums").map_err(driver)?;
+        let centroid_kernel = module.load_function("cell_centroids").map_err(driver)?;
+        let zero_kernel = module.load_function("fill_zero").map_err(driver)?;
         let apply_population = module.load_function("apply_population").map_err(driver)?;
         let recount = module.load_function("recount").map_err(driver)?;
 
@@ -983,6 +1019,11 @@ impl GpuSimulation {
                 .map_err(driver)?,
             lambda_nematic: stream.clone_htod(&lambda_nematic).map_err(driver)?,
             nematic_sums_kernel,
+            centroid_kernel,
+            zero_kernel,
+            circular: stream
+                .alloc_zeros::<f32>(labels_count * 7)
+                .map_err(driver)?,
             ring_size: ring_offsets.len() as i32,
             ring: stream.clone_htod(&ring_flat).map_err(driver)?,
             activity: stream.clone_htod(&activity_host).map_err(driver)?,
@@ -1147,6 +1188,38 @@ impl GpuSimulation {
         Ok(())
     }
 
+    /// Replace the nematic field, one (Q_xx, Q_xy) pair per site.
+    ///
+    /// The per-cell field sums are rebuilt from the lattice at the start of
+    /// every step, so the next step prices copies against the new field.
+    ///
+    /// # Errors
+    /// [`GpuError::Driver`] if the field's length is not the site count, if
+    /// the model was built without a field, or if the upload fails.
+    pub fn set_nematic_field(&mut self, field: &[[f64; 2]]) -> Result<(), GpuError> {
+        let sites = self.model.width * self.model.height * self.model.depth;
+        if field.len() != sites {
+            return Err(GpuError::Driver(format!(
+                "nematic field has {} sites, the lattice {sites}",
+                field.len()
+            )));
+        }
+        if !self.model.has_nematic() {
+            return Err(GpuError::Driver(
+                "the model has no nematic coupling to update".into(),
+            ));
+        }
+        let host: Vec<f32> = field
+            .iter()
+            .flat_map(|q| [q[0] as f32, q[1] as f32])
+            .collect();
+        self.stream
+            .memcpy_htod(&host, &mut self.nematic_field)
+            .map_err(driver)?;
+        self.model.nematic.copy_from_slice(field);
+        Ok(())
+    }
+
     /// Copy the lattice back.
     ///
     /// # Errors
@@ -1208,19 +1281,42 @@ impl GpuSimulation {
         let (w, h, d) = (self.model.width, self.model.height, self.model.depth);
         let sites = (w * h * d) as i32;
         let labels = self.cell_type_host.len();
-        let extent = [w as f32, h as f32, d as f32];
-
-        let mut sums = self.stream.alloc_zeros::<f32>(labels * 7).map_err(driver)?;
-        self.launch_circular_sums(&mut sums, sites, &extent, block)?;
-        let sums_host = self.stream.clone_dtoh(&sums).map_err(driver)?;
-        let anchor_host = centroids_from(&sums_host, labels, &extent);
-        self.anchor = self.stream.clone_htod(&anchor_host).map_err(driver)?;
-
-        self.running_moments = self
-            .stream
-            .alloc_zeros::<f32>(labels * 10)
-            .map_err(driver)?;
         let (width, height, depth) = (w as i32, h as i32, d as i32);
+        let site_config = launch_over(w * h * d, block);
+
+        resize(&self.stream, &mut self.circular, labels * 7)?;
+        resize(&self.stream, &mut self.anchor, labels * 3)?;
+        resize(&self.stream, &mut self.running_moments, labels * 10)?;
+        zero(&self.stream, &self.zero_kernel, &mut self.circular, block)?;
+        zero(
+            &self.stream,
+            &self.zero_kernel,
+            &mut self.running_moments,
+            block,
+        )?;
+
+        let mut launch = self.stream.launch_builder(&self.circular_sums);
+        launch
+            .arg(&self.labels)
+            .arg(&mut self.circular)
+            .arg(&sites)
+            .arg(&width)
+            .arg(&height)
+            .arg(&depth);
+        unsafe { launch.launch(site_config) }.map_err(driver)?;
+
+        let n = labels as i32;
+        let extent = [w as f32, h as f32, d as f32];
+        let mut launch = self.stream.launch_builder(&self.centroid_kernel);
+        launch
+            .arg(&self.circular)
+            .arg(&mut self.anchor)
+            .arg(&n)
+            .arg(&extent[0])
+            .arg(&extent[1])
+            .arg(&extent[2]);
+        unsafe { launch.launch(launch_over(labels, block)) }.map_err(driver)?;
+
         let mut launch = self.stream.launch_builder(&self.sums_kernel);
         launch
             .arg(&self.labels)
@@ -1230,7 +1326,7 @@ impl GpuSimulation {
             .arg(&width)
             .arg(&height)
             .arg(&depth);
-        unsafe { launch.launch(launch_over(w * h * d, block)) }.map_err(driver)?;
+        unsafe { launch.launch(site_config) }.map_err(driver)?;
         Ok(())
     }
 
@@ -1239,7 +1335,13 @@ impl GpuSimulation {
         let (w, h, d) = (self.model.width, self.model.height, self.model.depth);
         let sites = (w * h * d) as i32;
         let labels = self.cell_type_host.len();
-        self.nematic_sum = self.stream.alloc_zeros::<f32>(labels * 2).map_err(driver)?;
+        resize(&self.stream, &mut self.nematic_sum, labels * 2)?;
+        zero(
+            &self.stream,
+            &self.zero_kernel,
+            &mut self.nematic_sum,
+            block,
+        )?;
         let mut launch = self.stream.launch_builder(&self.nematic_sums_kernel);
         launch
             .arg(&self.labels)
@@ -1430,23 +1532,31 @@ impl GpuSimulation {
     }
 }
 
-/// Centroids from the circular sums.
-///
-/// The mean of `exp(2 pi i x / W)` is single-valued whatever the wrap, so its
-/// angle gives a centroid for a cell straddling the edge as well.
-fn centroids_from(sums: &[f32], labels: usize, extent: &[f32; 3]) -> Vec<f32> {
-    let mut out = vec![0.0f32; labels * 3];
-    for label in 1..labels {
-        if sums[label * 7] <= 0.0 {
-            continue;
-        }
-        for axis in 0..3 {
-            let angle = sums[label * 7 + 2 + 2 * axis].atan2(sums[label * 7 + 1 + 2 * axis]);
-            let span = extent[axis];
-            out[label * 3 + axis] = (angle / std::f32::consts::TAU * span).rem_euclid(span);
-        }
+/// Reallocate `buffer` when the number of labels has changed its length.
+fn resize(
+    stream: &Arc<CudaStream>,
+    buffer: &mut CudaSlice<f32>,
+    len: usize,
+) -> Result<(), GpuError> {
+    if buffer.len() != len {
+        *buffer = stream.alloc_zeros::<f32>(len).map_err(driver)?;
     }
-    out
+    Ok(())
+}
+
+/// Zero `buffer` on the device, without a host copy.
+fn zero(
+    stream: &Arc<CudaStream>,
+    kernel: &CudaFunction,
+    buffer: &mut CudaSlice<f32>,
+    block: u32,
+) -> Result<(), GpuError> {
+    let len = buffer.len();
+    let n = len as i32;
+    let mut launch = stream.launch_builder(kernel);
+    launch.arg(&mut *buffer).arg(&n);
+    unsafe { launch.launch(launch_over(len, block)) }.map_err(driver)?;
+    Ok(())
 }
 
 /// A launch covering `n` items in blocks of `block`.

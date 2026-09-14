@@ -176,10 +176,76 @@ fn run_volumes(text: &str, steps: Option<u64>) -> PyResult<Vec<u32>> {
     Ok(sim.volume)
 }
 
+/// A run kept on the device between calls, for coupling to another solver.
+///
+/// The kernel compiles once and the lattice stays on the GPU, where the
+/// command-line engine starts a process, compiles and uploads for every run.
+/// A caller alternates `step`, `labels` and `set_nematic_field`.
+#[cfg(feature = "cuda")]
+#[pyclass(unsendable)]
+struct GpuSession {
+    sim: glazier::cuda::GpuSimulation,
+    sites: usize,
+}
+
+#[cfg(feature = "cuda")]
+#[pymethods]
+impl GpuSession {
+    /// Build from a description; relative `.npy` paths resolve against `base`.
+    #[new]
+    #[pyo3(signature = (text, base = "."))]
+    fn new(text: &str, base: &str) -> PyResult<Self> {
+        let bp = parse_blueprint(text)?;
+        let sim = bp
+            .simulation(std::path::Path::new(base))
+            .map_err(PyValueError::new_err)?;
+        let sites = bp.width * bp.height * bp.depth;
+        let gpu = glazier::cuda::GpuSimulation::from_cpu(&sim)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self { sim: gpu, sites })
+    }
+
+    /// Run `steps` Monte Carlo steps.
+    fn step(&mut self, py: Python<'_>, steps: u64) -> PyResult<()> {
+        py.detach(|| self.sim.step(steps))
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// The lattice, flat with `x` fastest.
+    fn labels(&self) -> PyResult<Vec<u32>> {
+        self.sim
+            .labels()
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Replace the field from a flat list of `2 * sites` numbers, (Q_xx, Q_xy) per site.
+    fn set_nematic_field(&mut self, flat: Vec<f64>) -> PyResult<()> {
+        if flat.len() != 2 * self.sites {
+            return Err(PyValueError::new_err(format!(
+                "expected {} numbers, got {}",
+                2 * self.sites,
+                flat.len()
+            )));
+        }
+        let pairs: Vec<[f64; 2]> = flat.chunks_exact(2).map(|c| [c[0], c[1]]).collect();
+        self.sim
+            .set_nematic_field(&pairs)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Monte Carlo steps completed.
+    #[getter]
+    fn mcs(&self) -> u64 {
+        self.sim.mcs
+    }
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     m.add_function(wrap_pyfunction!(run_volumes, m)?)?;
+    #[cfg(feature = "cuda")]
+    m.add_class::<GpuSession>()?;
     Ok(())
 }
