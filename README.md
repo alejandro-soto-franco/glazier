@@ -309,6 +309,33 @@ the cell instead of moving it, and a cell driven hard enough can wrap medium
 into a ring that the connectivity veto then locks.
 `blueprints/immune-motile.json` gives a regime that works.
 
+## Nematic coupling
+
+A type with `lambda_nematic` aligns its cells to an external nematic field.
+The description names the field as `nematic_field`, a `.npy` of shape
+`(height, width, 2)` whose pairs are (Q_xx, Q_xy) at each site. The energy is
+
+    H = -lambda_nematic * sum over cells of dot(F, a)
+
+with F the field summed over the cell's sites and
+a = ((c_xx - c_yy), 2 c_xy) / (c_xx + c_yy) the cell's anisotropy from its
+second moments. A cell lowers it by elongating along the director, at half
+the angle of (Q_xx, Q_xy). Both engines keep the per-cell field sums and
+moments up to date on every accepted copy.
+
+`initial.labels` names a `.npy` label image to start from in place of the
+tiled grid. With the two together a run can alternate with a continuum
+solver: glazier moves the cells under the field, the cells' anisotropy is
+averaged onto the solver's grid, the solver evolves the field, and the next
+glazier run starts from the last labels. volterra's `run_dry_active_nematic`
+uses the same (q1, q2) = (Q_xx, Q_xy) components.
+
+The tests check the energy change of a copy against a full recomputation to
+1e-8, the running field sums against a recount, and that cells under a uniform
+field align within 0.15 rad with order above 0.7, where uncoupled cells stay
+below 0.4, on the serial engine and on the GPU.
+`blueprints/monolayer-nematic.json` runs that case.
+
 ## Adhesion molecules
 
 A description can name adhesion molecules, say how much of each a type
