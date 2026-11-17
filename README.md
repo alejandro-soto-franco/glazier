@@ -53,8 +53,8 @@ description in the tree, through the compiled module and through the binary.
 
 The Rust side builds with cargo and the Python side runs under pixi, since
 CompuCell3D installs from a conda channel and pins its interpreter. `mermin`, my
-related cell-image analysis software, keeps its own environment, so the
-measurement in `bench/roundtrip.py` reaches it through files.
+related cell-image analysis software, keeps its own environment. The
+measurement in `bench/roundtrip.py` therefore reaches it through files.
 
 ## Scope
 
@@ -67,7 +67,7 @@ ellipse. CompuCell3D writes the first three the same way.
 One Monte Carlo step is as many copy attempts as there are sites, after which
 the chemical fields diffuse and decay, cells secrete into and take up from the
 sites they own, and cells past their division volume split while cells of a
-type with a death rate die. A copy that would empty a cell is refused, so a
+type with a death rate die. A copy that would empty a cell is refused. A
 cell leaves the lattice only by dying.
 
 A cell with a chemotactic sensitivity prices each copy against the field at the
@@ -91,15 +91,15 @@ virus and 654 of interferon on the lattice.
 
 Two copy attempts are independent when neither target sits in the other's
 neighbourhood. Colouring sites by `(x mod 2, y mod 2)` puts same-colour targets
-two apart, outside a Moore neighbourhood, so one colour's attempts all run at
-once and a step is the four colours in turn.
+two apart, outside a Moore neighbourhood. One colour's attempts all run at
+once, and a step is the four colours in turn.
 
 Note two differences:
 
 - The serial engine draws targets with replacement; the device visits every
   site once per step.
 - A cell's volume is read before a copy is priced and written with an atomic
-  after, so several accepted copies on one cell within a colour each price
+  after. Several accepted copies on one cell within a colour therefore each price
   their move against the same volume.
 
 They therefore agree in distribution. `tests/gpu_matches_cpu.rs` checks cell
@@ -126,8 +126,8 @@ The kernel is f32 throughout, which suits a card whose fp64 runs at a
 seventy-first of its fp32. The CPU reference is f64.
 
 The draws are counter-based: each one is a hash of site, step, colour and
-index, so no generator state is stored. A xoshiro256++ state per site
-instead moved 64 bytes per site per colour, more traffic than the lattice
+index. No generator state is stored. A xoshiro256++ state per site
+moved 64 bytes per site per colour, more traffic than the lattice
 itself, and ran 1.7 times slower on a card that is bandwidth-bound.
 
 A short run through the CLI reads slower on the device than these figures,
@@ -141,7 +141,7 @@ for both.
 
 A coordinate wraps by comparison, since every caller steps one neighbour offset
 from a coordinate already in range. A remainder is a division and it sits in the
-innermost loop of the sweep, so the change took the serial engine from 4.05 s to
+innermost loop of the sweep. The change took the serial engine from 4.05 s to
 3.15 s at 1024 by 1024.
 
 ## Engine comparison
@@ -165,7 +165,7 @@ CompuCell3D 4.10, on both glazier engines and on PhysiCell 1.14.2: 128 by 128,
 
 Cell count and net charge transfer across all four. Cell shape does not. A
 Potts cell is an irregular polygon at eccentricity 0.4 and a PhysiCell agent is
-a disc at 0.04, so the orientational quantities in the PhysiCell column describe
+a disc at 0.04. The orientational quantities in the PhysiCell column therefore describe
 its rasterisation.
 
 ## Surface term across engines
@@ -181,8 +181,8 @@ amount.
 | Area rms from target | 1.59 | 1.61 | 1.72 |
 | Disclinations | 38 | 34 | 44 |
 
-The global nematic order over 256 cells fluctuates by roughly `1/sqrt(N)`, so
-that column varies most between runs. Eccentricity and defect count are the
+The global nematic order over 256 cells fluctuates by roughly `1/sqrt(N)`.
+That column varies most between runs. Eccentricity and defect count are the
 steady ones.
 
 ## Three dimensions
@@ -199,7 +199,7 @@ Moore neighbours, the usual meaning in a two-dimensional model.
 
 Two effects come from the dimension itself. Explicit
 diffusion is stable to `D dt / dx^2` of a quarter in a plane and a sixth in a
-volume, so the same diffusion constant takes half again as many sub-steps. The
+volume. The same diffusion constant therefore takes half again as many sub-steps. The
 device checkerboard likewise needs eight colours where a plane needs four,
 since same-colour targets have to stay two apart on every axis.
 
@@ -212,8 +212,8 @@ taking it up and following its gradient, 60 steps in 1.09 s against 0.081 s.
 Two terms take different parameters in a volume. A drift moves a 512-site
 cell's centroid by a five-hundredth of a site per accepted copy, where a
 64-site cell in a plane moves by a sixty-fourth. A site in a volume also has
-eighteen neighbours where one in a plane has eight, so the geometric mean the
-memory reads drops to zero far more readily: at `max_activity` 20, which moves
+eighteen neighbours where one in a plane has eight. The geometric mean the
+memory reads therefore drops to zero far more readily: at `max_activity` 20, which moves
 a cell three times as far in a plane, a cell in a volume does not move at all,
 and it takes 100 before it does. Both are recorded in
 `glazier-tests/tests/volume_terms.rs`.
@@ -232,10 +232,9 @@ two percent of it on a secreting sheet.
 
 Division and death need a decision per cell over a set of sites scattered across
 the lattice. The reductions and the relabelling run on the device: a
-circular-mean pass for the centroid, which is single-valued whatever the wrap so
-a cell straddling the edge still has one, a second pass for the moments against
+circular-mean pass for the centroid (a cell straddling the edge still has one, whatever the wrap), a second pass for the moments against
 it, and a pass that cuts or clears. The decisions cross to the host, where one
-entry per cell is thousands of numbers instead of millions. Both counters are
+entry per cell is thousands of numbers and not millions. Both counters are
 rebuilt from the lattice afterwards, since either event changes every
 neighbour's boundary.
 
@@ -244,7 +243,7 @@ neighbourhood around the copy can see. The device keeps ten running sums per
 cell in a frame each cell's own centroid sets, rebuilt at the top of every step,
 and reads the axis from the largest eigenvalue of the three by three in closed
 form. Rebuilding every step bounds the f32 accumulation to one step of rounding
-instead of a whole run's.
+and not a whole run's.
 
 On `blueprints/infection-512.json`, 4096 cells with two fields and a death rate,
 200 steps take 9.72 s on the serial engine and 1.66 s on the device, and they
@@ -257,8 +256,8 @@ synchronises once a step.
 A cell that a copy would pinch in two refuses that copy, on either engine. The
 test is local. It reads the neighbourhood of the site being taken and asks
 whether the sites there belonging to the losing cell fall into one piece.
-CompuCell3D walks the cell's whole site graph instead, which is serial by
-construction, so the engines refuse different sets of copies while both keep
+CompuCell3D walks the cell's whole site graph, and that walk is serial by
+construction. The engines therefore refuse different sets of copies while both keep
 cells whole, as the description asks.
 
 The condition is sufficient and not necessary. It stops every local pinch, and
@@ -281,16 +280,16 @@ intent differently.
 
 ## Polarity
 
-Two ways for a cell to move. Both are priced along the move rather than as
+Two ways for a cell to move. Both are priced along the move and are not
 terms in a total energy.
 
 **Memory.** Every site remembers how recently it was taken, and a copy is
 priced against the difference in that memory between the two sites it runs
 between. A cell that extends in one direction leaves a trail of recent sites
 behind its front, and the energy difference favours extending the same way over
-turning, so the cell polarises and travels. The neighbourhood average is a
-geometric mean, which is zero as soon as one neighbour has forgotten, so the
-memory acts as a front. This is the Act model of Niculescu, Textor and de
+turning. The cell polarises and travels. The neighbourhood average is a
+geometric mean, and it is zero as soon as one neighbour has forgotten. The
+memory is therefore a front. This is the Act model of Niculescu, Textor and de
 Boer.
 
 Over 400 steps a cell at `max_activity` 20 and `lambda_activity` 60 travels
@@ -304,8 +303,8 @@ with one travels that way whatever its neighbours do, and it needs
 ![Displacement under the memory term](figures/motility.png)
 
 Both take their parameters from the volume constraint. The memory bonus
-is bounded by `lambda_activity`, so a value far past `lambda_volume` inflates
-the cell instead of moving it, and a cell driven hard enough can wrap medium
+is bounded by `lambda_activity`. A value far past `lambda_volume` inflates
+the cell and does not move it, and a cell driven hard enough can wrap medium
 into a ring that the connectivity veto then locks.
 `blueprints/immune-motile.json` gives a regime that works.
 
@@ -334,19 +333,19 @@ For that loop the Python module has `GpuSession` in a build with the `cuda`
 feature (`maturin build --features cuda`). It compiles the kernel once and
 keeps the lattice on the device, and between rounds `set_nematic_field` uploads
 the new field and `labels` copies the lattice back. On a 512 by 512 lattice a
-round of 250 steps costs 0.21 s of steps and 0.08 s of transfer, against
+round of 250 steps takes 0.21 s of steps and 0.08 s of transfer, against
 1.3 s through the binary, which starts a process and compiles every time.
 
 The tests check the energy change of a copy against a full recomputation to
 1e-8, the running field sums against a recount, and that cells under a uniform
-field align within 0.15 rad with order above 0.7, where uncoupled cells stay
+field lie within 0.15 rad of the director with order above 0.7, where uncoupled cells stay
 below 0.4, on the serial engine and on the GPU.
 `blueprints/monolayer-nematic.json` runs that case.
 
 ## Adhesion molecules
 
 A description can name adhesion molecules, say how much of each a type
-presents, and give a binding matrix over them, instead of writing out an energy
+presents, and give a binding matrix over them, in place of writing out an energy
 per pair of types. What two types' molecules bind comes off the contact energy
 between them, and since that is a function of the two types alone, it folds
 into the contact matrix before an engine ever sees it. The test runs a molecule
@@ -360,9 +359,8 @@ epithelial cells, 9.5 across the pair and 9.1 between mesenchymal ones, from a
 stated 12.0 throughout.
 
 Per-cell adhesion stays out, where two cells of one type present different
-amounts and the amounts change as the cell runs. That is state per cell rather
-than per type, and it moves during a run, so it belongs to a trajectory instead
-of a description.
+amounts and the amounts change as the cell runs. That is state per cell and not per type. It moves during a run and belongs to a trajectory
+and not to a description.
 
 ## Not implemented
 
@@ -390,8 +388,7 @@ recovers against the director the model was given, at 0.34 degrees median over
 
 ## Figures
 
-`pixi run figures` regenerates every image above from runs it makes itself, so
-every figure here comes from a run in this repository. The sweep at
+`pixi run figures` regenerates every image above from runs it makes itself. Every figure here comes from a run in this repository. The sweep at
 the top end takes minutes and its table is cached under `runs/figures`.
 
 ## Licence
